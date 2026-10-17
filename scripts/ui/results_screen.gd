@@ -1,0 +1,85 @@
+extends Control
+## Classement de fin de partie multijoueur locale.
+
+
+func _ready() -> void:
+	add_child(UIKit.background())
+	var margin: MarginContainer = MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 20)
+	add_child(margin)
+
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
+
+	var col: VBoxContainer = VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 12)
+	scroll.add_child(col)
+
+	col.add_child(UIKit.spacer(16))
+	col.add_child(UIKit.label("Classement", 38, UIKit.GOLD, true))
+	col.add_child(UIKit.label(LocalSession.title(LocalSession.game), 15, UIKit.TEXT_SOFT))
+	col.add_child(UIKit.spacer(8))
+
+	var rows: Array[Dictionary] = LocalSession.results
+	for i: int in rows.size():
+		col.add_child(_row(i, rows[i]))
+
+	col.add_child(UIKit.spacer(10))
+	var again: Button = UIKit.button("Rejouer avec les mêmes joueurs", UIKit.GOLD, UIKit.INK, 18)
+	again.pressed.connect(_change.bind(LocalSession.scene(LocalSession.game)))
+	col.add_child(again)
+	var edit: Button = UIKit.outline_button("Modifier la partie", Color.WHITE, 16)
+	edit.pressed.connect(_change.bind(LocalSession.SETUP_SCENE))
+	col.add_child(edit)
+	var home: Button = UIKit.outline_button("Accueil", UIKit.TEXT_SOFT, 16)
+	home.pressed.connect(_change.bind(LocalSession.HOME_SCENE))
+	col.add_child(home)
+	UIKit.fade_in(self)
+
+
+func _row(index: int, data: Dictionary) -> Control:
+	var first: bool = index == 0
+	var border: Color = Color(UIKit.GOLD.r, UIKit.GOLD.g, UIKit.GOLD.b, 0.8) if first else Color(1, 1, 1, 0.1)
+	var panel: PanelContainer = UIKit.panel(
+		Color(0.06, 0.3, 0.17, 0.9) if first else Color(0, 0, 0, 0.3), 16, 12, border
+	)
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+
+	var medal_color: Color = [UIKit.GOLD, Color(0.78, 0.8, 0.85), Color(0.8, 0.5, 0.25)][mini(index, 2)] if index < 3 else Color(1, 1, 1, 0.15)
+	var medal: PanelContainer = PanelContainer.new()
+	medal.custom_minimum_size = Vector2(38, 38)
+	medal.add_theme_stylebox_override("panel", UIKit.box(medal_color, 19))
+	var rank: Label = UIKit.label(str(index + 1), 18, UIKit.INK if index < 3 else Color.WHITE, true)
+	medal.add_child(rank)
+	row.add_child(medal)
+
+	var name_label: Label = UIKit.label(str(data["name"]), 19, Color.WHITE, true)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	row.add_child(name_label)
+
+	var right: VBoxContainer = VBoxContainer.new()
+	var coins: CoinLabel = CoinLabel.new(17, UIKit.GOLD)
+	coins.set_amount(int(data["stack"]))
+	right.add_child(coins)
+	var delta: int = int(data["stack"]) - int(data["start"])
+	var delta_color: Color = UIKit.GREEN_ACTION if delta > 0 else (UIKit.WARNING_TEXT if delta < 0 else UIKit.TEXT_SOFT)
+	right.add_child(UIKit.label(UIKit.signed(delta), 13, delta_color))
+	row.add_child(right)
+	return panel
+
+
+func _change(scene_path: String) -> void:
+	get_tree().change_scene_to_file(scene_path)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_change(LocalSession.HOME_SCENE)

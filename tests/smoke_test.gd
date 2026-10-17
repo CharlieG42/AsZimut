@@ -61,6 +61,9 @@ func _run() -> void:
 	await _test_stats(stats)
 	await _test_blackjack(bank)
 	await _test_poker(bank)
+	await _test_setup()
+	await _test_multi_blackjack()
+	await _test_multi_poker()
 
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
@@ -225,3 +228,188 @@ func _find_button_prefix(node: Node, prefix: String) -> Button:
 		if found != null:
 			return found
 	return null
+
+
+func _count_face_up(node: Node) -> int:
+	var n: int = 0
+	if node is CardView:
+		var v: CardView = node as CardView
+		if not v.empty and not v.face_down:
+			n += 1
+	for child: Node in node.get_children():
+		n += _count_face_up(child)
+	return n
+
+
+func _test_setup() -> void:
+	LocalSession.game = LocalSession.Game.POKER
+	LocalSession.count = 2
+	var screen: Node = _mount("res://scenes/setup.tscn")
+	await _frames(3)
+	_check(_find_button(screen, "2 joueurs") == null, "pas de bouton parasite")
+	_check(_press(screen, "+"), "ajouter un joueur")
+	await _frames(2)
+	_check(LocalSession.count == 3, "3 joueurs")
+	_check(_press(screen, "Blackjack"), "choix Blackjack")
+	await _frames(2)
+	_check(LocalSession.game == LocalSession.Game.BLACKJACK, "jeu = blackjack")
+	for _i: int in 6:
+		_press(screen, "+")
+		await _frames(1)
+	_check(LocalSession.count == 5, "blackjack plafonné à 5 joueurs")
+	_check(_press(screen, "Poker"), "retour poker")
+	await _frames(2)
+	for _i: int in 6:
+		_press(screen, "+")
+		await _frames(1)
+	_check(LocalSession.count == 6, "poker plafonné à 6 joueurs")
+	_check(_press(screen, "2000"), "2000 jetons")
+	await _frames(2)
+	_check(LocalSession.chips == 2000, "jetons de départ 2000")
+	LocalSession.set_count(3)
+	LocalSession.names = ["Alice", " ", "Alice", "", "", ""]
+	var names: Array[String] = LocalSession.player_names()
+	_check(
+		names.size() == 3 and names[0] == "Alice" and names[1] == "Joueur 2" and names[2] == "Alice (2)",
+		"noms par défaut et doublons"
+	)
+	LocalSession.chips = 1000
+	await _unmount(screen)
+
+
+func _test_multi_blackjack() -> void:
+	LocalSession.game = LocalSession.Game.BLACKJACK
+	LocalSession.count = 3
+	LocalSession.chips = 500
+	LocalSession.names = ["Ana", "Ben", "Cléo", "", "", ""]
+	var screen: Node = _mount("res://scenes/multi_blackjack.tscn")
+	await _frames(3)
+	var engine: MultiBlackjackEngine = screen.get("engine") as MultiBlackjackEngine
+	_check(engine != null and engine.seats.size() == 3, "moteur blackjack multi créé")
+	engine.rng.seed = 4242
+	screen.get("_dealer_timer").wait_time = 0.05
+
+	var rounds_done: int = 0
+	var order_ok: bool = true
+	for round_index: int in 5:
+		for expected: int in 3:
+			if engine.phase != MultiBlackjackEngine.Phase.BET:
+				break
+			if engine.current != expected:
+				order_ok = false
+			_check(_find_button(screen, "Valider la mise") != null, "bouton valider (tour %d)" % expected)
+			if engine.seats[expected].bet < 10:
+				_check(_press(screen, "25"), "jeton 25 pour %s" % engine.seats[expected].name)
+			await _frames(1)
+			_check(_press(screen, "Valider la mise"), "valider la mise de %s" % engine.seats[expected].name)
+			await _frames(1)
+		var guard: int = 0
+		while engine.phase == MultiBlackjackEngine.Phase.PLAY and guard < 40:
+			guard += 1
+			var who: int = engine.current
+			var value: int = BlackjackEngine.bj_value(engine.seats[who].hand)
+			if value < 15 and _press(screen, "Carte"):
+				pass
+			else:
+				_check(_press(screen, "Rester"), "rester")
+			await _frames(1)
+		var waited: int = 0
+		while engine.phase != MultiBlackjackEngine.Phase.DONE and waited < 200:
+			waited += 1
+			await _frames(1)
+		_check(engine.phase == MultiBlackjackEngine.Phase.DONE, "manche %d terminée" % (round_index + 1))
+		var total: int = 0
+		for seat: MultiBlackjackEngine.Seat in engine.seats:
+			total += seat.stack
+		_check(total <= 1500 + 3 * 400 and total >= 0, "piles cohérentes")
+		rounds_done += 1
+		if engine.is_game_over():
+			break
+		_check(_press(screen, "Manche suivante"), "manche suivante")
+		await _frames(2)
+	_check(order_ok, "les joueurs misent dans l'ordre")
+	_check(rounds_done == 5, "5 manches de blackjack multi jouées par l'interface")
+	await _unmount(screen)
+
+
+func _test_multi_poker() -> void:
+	LocalSession.game = LocalSession.Game.POKER
+	LocalSession.count = 3
+	LocalSession.chips = 5000
+	LocalSession.names = ["Ana", "Ben", "Cléo", "", "", ""]
+	var screen: Node = _mount("res://scenes/multi_poker.tscn")
+	await _frames(3)
+	var engine: PokerTableEngine = screen.get("engine") as PokerTableEngine
+	_check(engine != null and engine.seats.size() == 3, "moteur poker table créé")
+	engine.rng.seed = 777
+	screen.get("_runout_timer").wait_time = 0.05
+
+	var hands_done: int = 0
+	var covers_seen: int = 0
+	var leaks: int = 0
+	var frames_budget: int = 3000
+	while hands_done < 8 and frames_budget > 0 and not engine.is_game_over():
+		frames_budget -= 1
+		await _frames(1)
+		var cover: Control = screen.get("_cover") as Control
+		if engine.hand_over:
+			hands_done += 1
+			if engine.is_game_over():
+				break
+			_check(_press(screen, "Main suivante"), "main suivante (%d)" % hands_done)
+			continue
+		if cover.visible:
+			covers_seen += 1
+			# Rien ne doit être visible sous l'écran de passage : le panneau de cartes et les
+			# actions sont masqués, et aucune carte n'est face visible chez personne.
+			if (screen.get("_hole_box") as Control).visible:
+				leaks += 1
+			if _find_button(screen, "Coucher") != null:
+				leaks += 1
+			var current: String = engine.seats[engine.to_act].name
+			_check(_press(screen, "Je suis %s" % current), "déverrouillage par %s" % current)
+			await _frames(1)
+			continue
+		if engine.runout:
+			continue
+		if engine.can_act():
+			# Seul le joueur courant voit ses cartes (via le panneau dédié), jamais les autres.
+			if _count_face_up((screen.get("_seat_nodes") as Array)[0]["cards"] as Node) > 0 and not engine.reveal:
+				leaks += 1
+			var roll: int = (hands_done + engine.hand_number) % 5
+			var acted: bool = false
+			if roll == 1 and engine.current_bet <= engine.big_blind():
+				if _press(screen, "½ pot"):
+					var raise_btn: Button = _find_button_prefix(screen, "Relancer à")
+					if raise_btn == null:
+						raise_btn = _find_button_prefix(screen, "Miser")
+					if raise_btn != null:
+						raise_btn.pressed.emit()
+						acted = true
+			elif roll == 3:
+				acted = _press(screen, "Coucher")
+			if not acted:
+				var call_btn: Button = _find_button(screen, "Checker")
+				if call_btn == null:
+					call_btn = _find_button_prefix(screen, "Suivre")
+				_check(call_btn != null, "action de suivi disponible")
+				if call_btn != null:
+					call_btn.pressed.emit()
+	_check(leaks == 0, "aucune carte visible pendant le passage d'appareil (%d fuites)" % leaks)
+	_check(covers_seen >= 8, "écran de passage affiché (%d)" % covers_seen)
+	_check(hands_done >= 8 or engine.is_game_over(), "8 mains de poker multi jouées (%d)" % hands_done)
+	var sum: int = engine.pot()
+	for seat: PokerTableEngine.Seat in engine.seats:
+		sum += seat.stack
+	_check(sum == 15000, "jetons conservés à l'écran (%d)" % sum)
+
+	# Quitter : deux appuis, classement cohérent.
+	_check(_press(screen, "‹ Terminer"), "terminer (1er appui)")
+	await _frames(1)
+	_check(_press(screen, "Confirmer ?"), "terminer (confirmation)")
+	await _frames(2)
+	var total: int = 0
+	for row: Dictionary in LocalSession.results:
+		total += int(row["stack"])
+	_check(LocalSession.results.size() == 3 and total == 15000, "classement final : jetons conservés (%d)" % total)
+	await _unmount(screen)

@@ -23,6 +23,15 @@
 - Indication de votre meilleure main en cours (« Paire de Rois »…).
 - Quitter en pleine main revient à se coucher.
 
+### Multijoueur local (même appareil, hors ligne)
+Bouton « Multijoueur local » de l'accueil : on choisit le jeu, le nombre de joueurs, leurs noms et les jetons de départ.
+La partie est indépendante de la banque et des statistiques solo.
+- **Blackjack, 2 à 5 joueurs** contre le croupier : chacun a sa pile, mise puis joue à son tour (carte, rester, doubler).
+- **Poker Hold'em, 2 à 6 joueurs** : tapis, pots annexes, relance au curseur, blinds qui augmentent toutes les 8 mains,
+  éliminations et classement final.
+- **Écran « passez l'appareil »** avant chaque tour de poker : les cartes ne sont visibles que pour le joueur dont c'est le tour.
+- Quitter avant la fin (deux appuis) rend les mises en cours et affiche le classement.
+
 ### IA (ZIA)
 - **Pré-flop** : formule de **Chen** (0–20) pour estimer la force de la main de départ.
 - **Post-flop** : **Monte-Carlo** (~200 simulations) sur la main + le board.
@@ -42,17 +51,20 @@ vibrations, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
 project.godot            # Réglages (portrait 540x960, renderer Compatibilité, autoloads Bankroll et Stats)
 export_presets.cfg       # Préréglage d'export Android (arm64, APK)
 icon.svg
-scenes/                  # home / blackjack / poker / stats (un nœud Control + son script)
+scenes/                  # home / blackjack / poker / stats / setup / multi_* / results (un nœud Control + son script)
 scripts/
 ├── bankroll_state.gd    # Autoload « Bankroll » : banque commune + record + sauvegarde
+├── local_session.gd     # Paramètres de la partie multijoueur locale (jeu, joueurs, jetons, classement)
 ├── stats_state.gd       # Autoload « Stats » : statistiques + réglages (niveau IA, vibrations)
 ├── core/
 │   ├── cards.gd         # Cartes = entiers 0..51, deck, mélange
 │   ├── hand_evaluator.gd# Évaluateur 5/7 cartes (scores lexicographiques)
 │   └── poker_ai.gd      # Formule de Chen + Monte-Carlo
 ├── games/
-│   ├── blackjack_engine.gd  # Moteur blackjack (règles + croupier IA)
-│   └── poker_engine.gd      # Moteur poker (machine à états + IA ZIA)
+│   ├── blackjack_engine.gd        # Moteur blackjack (règles + croupier IA)
+│   ├── poker_engine.gd            # Moteur poker heads-up (machine à états + IA ZIA)
+│   ├── multi_blackjack_engine.gd  # Blackjack 2–5 joueurs (même appareil)
+│   └── poker_table_engine.gd      # Poker 2–6 joueurs : blinds croissantes, pots annexes
 └── ui/
     ├── ui_kit.gd        # Palette feutre vert/or + fabriques de widgets
     ├── card_view.gd     # Carte dessinée en code (pas d'emoji ni d'image)
@@ -62,7 +74,7 @@ scripts/
     ├── chip_pile.gd     # Piles de jetons pour une mise / un pot
     ├── avatar_badge.gd  # Visage de ZIA
     ├── game_card.gd     # Tuile de l'accueil
-    └── *_screen.gd      # Écrans accueil, blackjack, poker
+    └── *_screen.gd      # Écrans : accueil, solo, stats, configuration, multijoueur, classement
 tests/
 ├── run_tests.gd         # Tests logiques (évaluateur, moteurs, simulations)
 └── smoke_test.gd        # Parcourt les écrans en appuyant sur les vrais boutons

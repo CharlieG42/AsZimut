@@ -89,6 +89,10 @@ func _ready() -> void:
 	_poker_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_poker_hint)
 
+	var local_btn: Button = UIKit.outline_button("Multijoueur local · 2 à 6 joueurs", UIKit.GOLD, 16)
+	local_btn.pressed.connect(_open.bind(LocalSession.SETUP_SCENE))
+	col.add_child(local_btn)
+
 	var spacer_fill: Control = Control.new()
 	spacer_fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(spacer_fill)

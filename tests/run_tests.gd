@@ -18,6 +18,10 @@ func _initialize() -> void:
 	_test_poker_simulation()
 	_test_poker_difficulty()
 	_test_raise_bounds()
+	_test_table_side_pots()
+	_test_table_flow()
+	_test_table_simulation()
+	_test_multi_blackjack()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -368,3 +372,266 @@ func _test_raise_bounds() -> void:
 		engine.bet_raise(PokerEngine.Actor.PLAYER, 1)
 		_check(engine.p_bet >= mn or engine.p_bet == mx, "relance trop faible relevée au minimum")
 		_check(engine.p_bet > before, "la relance augmente la mise")
+
+
+# --- Poker à table (multijoueur local) -----------------------------------------
+
+
+func _names(n: int) -> Array[String]:
+	var out: Array[String] = []
+	for i: int in n:
+		out.append("J%d" % (i + 1))
+	return out
+
+
+## Prépare une main figée : mains/board donnés, `totals` déjà engagés, `folded` couchés.
+func _rig(totals: Array, holes: Array, folded: Array = []) -> PokerTableEngine:
+	var e: PokerTableEngine = PokerTableEngine.new(_names(totals.size()), 1000)
+	e.start_hand()
+	e.button = 0
+	e.board = _hand([[2, 0], [7, 1], [9, 2], [11, 3], [4, 0]])
+	for i: int in totals.size():
+		var s: PokerTableEngine.Seat = e.seats[i]
+		s.hole = _hand(holes[i])
+		s.stack = 1000 - int(totals[i])
+		s.total = int(totals[i])
+		s.bet = 0
+		s.folded = folded.has(i)
+		s.start_stack = 1000
+	return e
+
+
+func _test_table_side_pots() -> void:
+	# A (AA) tapis 100, B (KK) et C (QQ) 300 : A prend le principal (300), B le pot annexe (400).
+	var e: PokerTableEngine = _rig(
+		[100, 300, 300],
+		[[[14, 1], [14, 2]], [[13, 1], [13, 2]], [[12, 1], [12, 2]]]
+	)
+	e.showdown()
+	_check(e.seats[0].stack == 900 + 300, "pot principal à A")
+	_check(e.seats[1].stack == 700 + 400, "pot annexe à B")
+	_check(e.seats[2].stack == 700, "C ne gagne rien")
+	_check(e.seats[0].stack + e.seats[1].stack + e.seats[2].stack == 3000, "jetons conservés (pots annexes)")
+
+	# Mise non suivie : A mise 200, B tapis 50, C couché → A récupère l'excédent.
+	e = _rig(
+		[200, 50, 30],
+		[[[14, 1], [14, 2]], [[13, 1], [13, 2]], [[12, 1], [12, 2]]],
+		[2]
+	)
+	e.showdown()
+	_check(e.seats[0].stack == 800 + 280, "A gagne tout (mise non suivie rendue)")
+	_check(e.seats[1].stack == 950, "B perd son tapis")
+
+	# Égalité parfaite à deux + 1 jeton mort d'un joueur couché : le jeton impair va au
+	# premier gagnant après le donneur (J2, le donneur étant J1).
+	e = _rig(
+		[100, 100, 1],
+		[[[13, 1], [12, 1]], [[13, 2], [12, 2]], [[3, 0], [5, 3]]],
+		[2]
+	)
+	e.showdown()
+	_check(e.seats[0].stack + e.seats[1].stack + e.seats[2].stack == 3000, "égalité : jetons conservés")
+	_check(e.seats[1].stack == 1001, "jeton impair au premier après le donneur")
+	_check(e.seats[0].stack == 1000, "l'autre reçoit la moitié")
+
+	# Pot disputé entre deux mains égales et une meilleure couchée : le couché ne gagne pas.
+	e = _rig(
+		[100, 100, 100],
+		[[[14, 1], [14, 2]], [[13, 1], [13, 2]], [[12, 1], [12, 2]]],
+		[0]
+	)
+	e.showdown()
+	_check(e.seats[0].stack == 900, "un joueur couché ne gagne jamais")
+	_check(e.seats[1].stack == 900 + 300, "meilleure main restante gagne")
+
+
+func _test_table_flow() -> void:
+	var e: PokerTableEngine = PokerTableEngine.new(_names(3), 1000)
+	e.rng.seed = 7
+	e.start_hand()
+	_check(e.seats[e.button].label == "D", "donneur identifié")
+	_check(e.pot() == 30, "blinds 10/20 postées")
+	_check(e.to_act == (e.button + 3) % 3, "premier à parler : après la grosse blind")
+	e.fold()
+	e.fold()
+	_check(e.hand_over, "main finie quand tous sauf un se couchent")
+	var total: int = 0
+	for s: PokerTableEngine.Seat in e.seats:
+		total += s.stack
+	_check(total == 3000 and e.pot() == 0, "jetons conservés après abandon des autres")
+
+	# Heads-up : le donneur est petite blind et parle en premier pré-flop.
+	var h: PokerTableEngine = PokerTableEngine.new(_names(2), 1000)
+	h.rng.seed = 3
+	h.start_hand()
+	_check(h.to_act == h.button, "heads-up : le donneur parle en premier")
+	h.check_call()
+	_check(h.to_act != h.button and not h.hand_over, "la grosse blind a l'option")
+	h.check_call()
+	_check(h.street == PokerTableEngine.Street.FLOP and h.board.size() == 3, "flop après les enchères")
+	_check(h.to_act != h.button, "heads-up : le non-donneur parle en premier après le flop")
+
+	# Tapis contre tapis : le board se déroule seul.
+	var a: PokerTableEngine = PokerTableEngine.new(_names(2), 500)
+	a.rng.seed = 11
+	a.start_hand()
+	a.raise_to(500)
+	a.check_call()
+	_check(a.runout or a.hand_over, "all-in : déroulé automatique")
+	var guard: int = 0
+	while not a.hand_over and guard < 10:
+		guard += 1
+		a.advance_street()
+	_check(a.hand_over and a.board.size() == 5, "all-in : 5 cartes au board et main terminée")
+	_check(a.seats[0].stack + a.seats[1].stack == 1000, "all-in : jetons conservés")
+
+	# Relance minimale
+	var r: PokerTableEngine = PokerTableEngine.new(_names(3), 1000)
+	r.rng.seed = 5
+	r.start_hand()
+	_check(r.min_raise_to(r.to_act) == 40, "relance minimale pré-flop = 2 grosses blinds")
+	r.raise_to(100)
+	_check(r.current_bet == 100 and r.min_raise == 80, "relance à 100 : incrément 80")
+	_check(r.min_raise_to(r.to_act) == 180, "contre-relance minimale")
+
+
+func _random_action(e: PokerTableEngine, r: RandomNumberGenerator) -> void:
+	var i: int = e.to_act
+	var roll: float = r.randf()
+	if roll < 0.12 and not e.can_check(i):
+		e.fold()
+	elif roll < 0.35 and e.can_raise(i):
+		var lo: int = e.min_raise_to(i)
+		var hi: int = e.max_raise_to(i)
+		e.raise_to(r.randi_range(lo, hi) if r.randf() < 0.7 else hi)
+	else:
+		e.check_call()
+
+
+func _test_table_simulation() -> void:
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = 2024
+	var games_finished: int = 0
+	var bad_total: int = 0
+	var stuck: int = 0
+	for game: int in 40:
+		var n: int = 2 + game % 5
+		var e: PokerTableEngine = PokerTableEngine.new(_names(n), 400)
+		e.rng.seed = 100 + game
+		var hands: int = 0
+		while not e.is_game_over() and hands < 400:
+			hands += 1
+			e.start_hand()
+			var steps: int = 0
+			while not e.hand_over and steps < 300:
+				steps += 1
+				if e.to_act >= 0:
+					_random_action(e, r)
+				else:
+					e.advance_street()
+				var sum: int = e.pot()
+				for s: PokerTableEngine.Seat in e.seats:
+					sum += s.stack
+					if s.stack < 0:
+						bad_total += 1
+				if sum != e.total_chips:
+					bad_total += 1
+			if not e.hand_over:
+				stuck += 1
+				break
+		if e.is_game_over():
+			games_finished += 1
+			var order: Array[int] = e.standings()
+			_check(order.size() == n and e.seats[order[0]].stack == e.total_chips, "vainqueur unique avec tous les jetons (partie %d)" % game)
+	_check(bad_total == 0, "jetons conservés à chaque étape (%d anomalies)" % bad_total)
+	_check(stuck == 0, "aucune main bloquée (%d)" % stuck)
+	_check(games_finished >= 30, "les parties se terminent (%d/40)" % games_finished)
+
+	# Abandon en pleine main : mises rendues.
+	var e2: PokerTableEngine = PokerTableEngine.new(_names(3), 1000)
+	e2.start_hand()
+	e2.raise_to(200)
+	e2.abort()
+	var total: int = 0
+	for s: PokerTableEngine.Seat in e2.seats:
+		total += s.stack
+	_check(total == 3000 and e2.is_game_over(), "abandon : mises rendues")
+
+
+# --- Blackjack multijoueur ------------------------------------------------------
+
+
+func _test_multi_blackjack() -> void:
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = 99
+	var anomalies: int = 0
+	for game: int in 30:
+		var n: int = 1 + game % 5
+		var e: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(n), 300)
+		e.rng.seed = 500 + game
+		var rounds: int = 0
+		while not e.is_game_over() and rounds < 60:
+			rounds += 1
+			var guard: int = 0
+			while e.phase == MultiBlackjackEngine.Phase.BET and guard < 20:
+				guard += 1
+				var s: MultiBlackjackEngine.Seat = e.seats[e.current]
+				if s.bet < MultiBlackjackEngine.MIN_BET:
+					e.add_to_bet(mini(10 * r.randi_range(1, 5), s.stack))
+				e.confirm_bet()
+			guard = 0
+			while e.phase == MultiBlackjackEngine.Phase.PLAY and guard < 100:
+				guard += 1
+				var roll: float = r.randf()
+				if roll < 0.15 and e.can_double():
+					e.double_down()
+				elif roll < 0.6 and BlackjackEngine.bj_value(e.seats[e.current].hand) < 17:
+					e.hit()
+				else:
+					e.stand()
+			if e.phase != MultiBlackjackEngine.Phase.DEALER:
+				anomalies += 1
+				break
+			e.dealer_plays()
+			for s: MultiBlackjackEngine.Seat in e.seats:
+				if s.ready:
+					var delta: int = s.net
+					var v: int = BlackjackEngine.bj_value(s.hand)
+					if s.result == BlackjackEngine.Outcome.NONE or (s.result == BlackjackEngine.Outcome.LOSE and delta != -s.bet) or v < 0:
+						anomalies += 1
+				if s.stack < 0:
+					anomalies += 1
+			e.next_round()
+	_check(anomalies == 0, "blackjack multi : manches cohérentes (%d anomalies)" % anomalies)
+
+	# Règles chiffrées : joueur 1 blackjack, joueur 2 bat le croupier, joueur 3 perd.
+	var e: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(3), 1000)
+	for seat: MultiBlackjackEngine.Seat in e.seats:
+		seat.bet = 100
+		seat.ready = true
+		seat.stack -= 100
+	e.seats[0].hand = _hand([[14, 0], [13, 1]])
+	e.seats[1].hand = _hand([[10, 0], [9, 1]])
+	e.seats[2].hand = _hand([[10, 0], [6, 1]])
+	for seat: MultiBlackjackEngine.Seat in e.seats:
+		seat.done = true
+	e.dealer = _hand([[10, 2], [8, 3]])
+	e.phase = MultiBlackjackEngine.Phase.DEALER
+	e.dealer_plays()
+	_check(e.seats[0].stack == 900 + 250 and e.seats[0].result == BlackjackEngine.Outcome.BLACKJACK, "blackjack payé 3:2")
+	_check(e.seats[1].stack == 900 + 200 and e.seats[1].result == BlackjackEngine.Outcome.WIN, "19 bat 18")
+	_check(e.seats[2].stack == 900 and e.seats[2].result == BlackjackEngine.Outcome.LOSE, "16 perd contre 18")
+
+	# Ordre des tours : les mises puis le jeu passent d'un joueur au suivant.
+	var t: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(3), 500)
+	t.rng.seed = 1
+	_check(t.current == 0, "J1 mise en premier")
+	t.add_to_bet(50)
+	t.confirm_bet()
+	_check(t.current == 1 and t.seats[0].stack == 450, "mise validée puis J2")
+	t.add_to_bet(25)
+	t.confirm_bet()
+	t.add_to_bet(10)
+	t.confirm_bet()
+	_check(t.phase != MultiBlackjackEngine.Phase.BET and t.seats[2].hand.size() == 2, "cartes distribuées après la dernière mise")
