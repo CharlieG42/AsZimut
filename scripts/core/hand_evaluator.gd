@@ -203,3 +203,64 @@ static func hand_name(score: Array[int]) -> String:
 	if score[0] == 8 and score[1] == 14:
 		return "Quinte flush royale"
 	return HAND_NAMES[score[0]]
+
+
+# --- Descriptions en français -------------------------------------------------
+
+
+## Nom d'un rang : « As », « Roi », « 7 »… (pluriel : « Rois », « Dames »…).
+static func rank_name(rank: int, plural: bool = false) -> String:
+	match rank:
+		14:
+			return "As"
+		13:
+			return "Rois" if plural else "Roi"
+		12:
+			return "Dames" if plural else "Dame"
+		11:
+			return "Valets" if plural else "Valet"
+		_:
+			return str(rank)
+
+
+## « d'As » / « de Rois » / « de 7 » (élision devant l'As).
+static func _de(rank: int) -> String:
+	if rank == 14:
+		return "d'As"
+	return "de " + rank_name(rank, true)
+
+
+## « à l'As » / « à la Dame » / « au Roi » / « au 9 ».
+static func _a(rank: int) -> String:
+	match rank:
+		14:
+			return "à l'As"
+		12:
+			return "à la Dame"
+		_:
+			return "au " + rank_name(rank)
+
+
+## Description lisible d'une main : « Paire de Rois », « Quinte à la Dame »…
+static func describe(score: Array[int]) -> String:
+	match score[0]:
+		8:
+			if score[1] == 14:
+				return "Quinte flush royale"
+			return "Quinte flush " + _a(score[1])
+		7:
+			return "Carré " + _de(score[1])
+		6:
+			return "Full %s par %s" % [rank_name(score[1], true), rank_name(score[2], true)]
+		5:
+			return "Couleur " + _a(score[1])
+		4:
+			return "Quinte " + _a(score[1])
+		3:
+			return "Brelan " + _de(score[1])
+		2:
+			return "Double paire %s et %s" % [rank_name(score[1], true), rank_name(score[2], true)]
+		1:
+			return "Paire " + _de(score[1])
+		_:
+			return "Hauteur " + rank_name(score[1])

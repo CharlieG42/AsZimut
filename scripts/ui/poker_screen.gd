@@ -9,7 +9,7 @@ var engine: PokerEngine
 
 var _stack_label: CoinLabel
 var _ai_stack: CoinLabel
-var _ai_bet_chip: PanelContainer
+var _ai_bet_pile: ChipPile
 var _ai_dealer_badge: Control
 var _ai_row: CardRow
 var _board_row: CardRow
@@ -18,7 +18,10 @@ var _street_chip: PanelContainer
 var _result_panel: PanelContainer
 var _result_label: Label
 var _player_row: CardRow
-var _player_bet_chip: PanelContainer
+var _player_bet_pile: ChipPile
+var _hand_hint: Label
+var _raise_to: int = 0
+var _last_result: String = ""
 var _player_dealer_badge: Control
 var _log_box: VBoxContainer
 var _log_panel: PanelContainer
@@ -28,7 +31,7 @@ var _runout_timer: Timer
 
 
 func _ready() -> void:
-	engine = PokerEngine.new(Bankroll.value)
+	engine = PokerEngine.new(Bankroll.value, Stats.difficulty)
 
 	_ai_timer = _make_timer(AI_DELAY, _on_ai_timer)
 	_runout_timer = _make_timer(RUNOUT_DELAY, _on_runout_timer)
@@ -65,7 +68,9 @@ func _ready() -> void:
 	col.add_child(_actions)
 
 	engine.changed.connect(_refresh)
+	engine.hand_finished.connect(_on_hand_finished)
 	_refresh()
+	UIKit.fade_in(self)
 
 
 func _make_timer(wait: float, handler: Callable) -> Timer:
@@ -115,25 +120,29 @@ func _build_ai_section() -> Control:
 	var head: HBoxContainer = HBoxContainer.new()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_theme_constant_override("separation", 10)
-	head.add_child(UIKit.label("ZIA", 18, Color.WHITE, true))
+	head.add_child(AvatarBadge.new(44))
+	var who: VBoxContainer = VBoxContainer.new()
+	who.add_child(UIKit.label("ZIA", 18, Color.WHITE, true))
+	who.add_child(UIKit.label("niveau " + PokerEngine.difficulty_name(engine.difficulty), 11, UIKit.TEXT_SOFT))
+	head.add_child(who)
 	_ai_stack = CoinLabel.new(14, UIKit.TEXT_SOFT)
 	head.add_child(_ai_stack)
-	_ai_bet_chip = UIKit.chip("")
-	head.add_child(_ai_bet_chip)
 	_ai_dealer_badge = _dealer_badge()
 	head.add_child(_ai_dealer_badge)
 	col.add_child(head)
 
 	_ai_row = CardRow.new(1.0, 2)
 	col.add_child(_ai_row)
+	_ai_bet_pile = ChipPile.new(120)
+	_ai_bet_pile.custom_minimum_size = Vector2(120, 50)
+	col.add_child(_ai_bet_pile)
 	return col
 
 
 func _build_table() -> Control:
-	var felt: PanelContainer = UIKit.panel(UIKit.FELT_GREEN, 24, 14, Color(0.024, 0.306, 0.231, 1.0))
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
-	felt.add_child(col)
+	var felt: PanelContainer = UIKit.table(col, 14)
 
 	_board_row = CardRow.new(0.9, 5)
 	col.add_child(_board_row)
@@ -149,8 +158,9 @@ func _build_table() -> Control:
 	chips.add_child(_street_chip)
 	col.add_child(chips)
 
-	_result_panel = UIKit.panel(Color(0, 0, 0, 0.5), 12, 10)
-	_result_label = UIKit.label("", 14, UIKit.GOLD, true)
+	_result_panel = PanelContainer.new()
+	_result_panel.add_theme_stylebox_override("panel", UIKit.banner_style(UIKit.Banner.NEUTRAL))
+	_result_label = UIKit.label("", 15, Color.WHITE, true)
 	_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_result_panel.add_child(_result_label)
 	col.add_child(_result_panel)
@@ -164,15 +174,20 @@ func _build_player_section() -> Control:
 	_player_row = CardRow.new(1.0, 2)
 	col.add_child(_player_row)
 
+	_player_bet_pile = ChipPile.new(120)
+	_player_bet_pile.custom_minimum_size = Vector2(120, 50)
+	col.add_child(_player_bet_pile)
+
 	var foot: HBoxContainer = HBoxContainer.new()
 	foot.alignment = BoxContainer.ALIGNMENT_CENTER
 	foot.add_theme_constant_override("separation", 10)
 	foot.add_child(UIKit.label("Vous", 18, Color.WHITE, true))
-	_player_bet_chip = UIKit.chip("")
-	foot.add_child(_player_bet_chip)
 	_player_dealer_badge = _dealer_badge()
 	foot.add_child(_player_dealer_badge)
 	col.add_child(foot)
+
+	_hand_hint = UIKit.label("", 13, UIKit.TEXT_SOFT)
+	col.add_child(_hand_hint)
 	return col
 
 
@@ -182,14 +197,12 @@ func _build_player_section() -> Control:
 func _refresh() -> void:
 	# Les jetons engagés dans la main ne sont plus dans la banque.
 	Bankroll.set_to(engine.p_stack)
-	_stack_label.set_amount(engine.p_stack)
-	_ai_stack.set_amount(engine.a_stack)
+	_stack_label.set_amount(engine.p_stack, true)
+	_ai_stack.set_amount(engine.a_stack, true)
 
-	_ai_bet_chip.visible = engine.a_bet > 0
-	UIKit.chip_label(_ai_bet_chip).text = "mise %d" % engine.a_bet
+	_ai_bet_pile.set_amount(engine.a_bet)
 	_ai_dealer_badge.visible = not engine.dealer_is_player
-	_player_bet_chip.visible = engine.p_bet > 0
-	UIKit.chip_label(_player_bet_chip).text = "mise %d" % engine.p_bet
+	_player_bet_pile.set_amount(engine.p_bet)
 	_player_dealer_badge.visible = engine.dealer_is_player
 
 	var ai_hidden: Array[bool] = [not engine.reveal_ai, not engine.reveal_ai]
@@ -201,10 +214,40 @@ func _refresh() -> void:
 	UIKit.chip_label(_street_chip).text = engine.street_label()
 	_result_panel.visible = engine.is_over()
 	_result_label.text = engine.result
+	_result_panel.add_theme_stylebox_override("panel", UIKit.banner_style(_banner_kind()))
+	if engine.result != _last_result:
+		_last_result = engine.result
+		if engine.result != "":
+			UIKit.pop(_result_panel)
+
+	var hint_ok: bool = not engine.player_hole.is_empty() and not engine.board.is_empty()
+	_hand_hint.visible = hint_ok
+	if hint_ok:
+		_hand_hint.text = "Votre main : " + engine.describe_hand(engine.player_hole)
 
 	_refresh_log()
 	_rebuild_actions()
 	_schedule_ai()
+
+
+func _banner_kind() -> int:
+	if not engine.is_over():
+		return UIKit.Banner.NEUTRAL
+	match engine.last_outcome:
+		PokerEngine.HandOutcome.WIN:
+			return UIKit.Banner.WIN
+		PokerEngine.HandOutcome.LOSE:
+			return UIKit.Banner.LOSE
+	return UIKit.Banner.NEUTRAL
+
+
+func _on_hand_finished(outcome: int, net: int, pot_won: int) -> void:
+	Stats.record_poker(outcome, net, pot_won)
+	match outcome:
+		PokerEngine.HandOutcome.WIN:
+			UIKit.haptic(Stats.haptics, 60)
+		PokerEngine.HandOutcome.LOSE:
+			UIKit.haptic(Stats.haptics, 140)
 
 
 func _refresh_log() -> void:
@@ -294,31 +337,69 @@ func _build_player_actions() -> Control:
 	col.add_child(row)
 
 	if engine.raises < 3 and engine.p_stack > 0:
-		var raise_row: HBoxContainer = HBoxContainer.new()
-		raise_row.add_theme_constant_override("separation", 8)
-		var facing_bet: bool = engine.a_bet > 0
-		var size_amount: int = engine.raise_half_size() if facing_bet else engine.open_bet_size()
-		var size_text: String = ("Relancer à %d" if facing_bet else "Miser %d") % size_amount
-		var size_btn: Button = UIKit.outline_button(size_text, Color.WHITE, 15)
-		size_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		size_btn.pressed.connect(engine.bet_raise.bind(PokerEngine.Actor.PLAYER, size_amount))
-		raise_row.add_child(size_btn)
-
-		var pot_btn: Button = UIKit.outline_button("Pot", Color.WHITE, 15)
-		pot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pot_btn.pressed.connect(
-			engine.bet_raise.bind(PokerEngine.Actor.PLAYER, engine.pot_size_bet())
-		)
-		raise_row.add_child(pot_btn)
-
-		var all_in: Button = UIKit.outline_button("Tapis", UIKit.GOLD, 15)
-		all_in.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		all_in.pressed.connect(
-			engine.bet_raise.bind(PokerEngine.Actor.PLAYER, engine.p_bet + engine.p_stack)
-		)
-		raise_row.add_child(all_in)
-		col.add_child(raise_row)
+		col.add_child(_build_raise_panel())
 	return col
+
+
+func _build_raise_panel() -> Control:
+	var lo: int = engine.min_raise_to()
+	var hi: int = engine.max_raise_to()
+	var facing_bet: bool = engine.a_bet > 0
+	_raise_to = clampi(_raise_to, lo, hi)
+	if _raise_to < lo or _raise_to == 0:
+		_raise_to = lo
+
+	var panel: PanelContainer = UIKit.panel(Color(0, 0, 0, 0.3), 14, 10, Color(1, 1, 1, 0.08))
+	var col: VBoxContainer = VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	panel.add_child(col)
+
+	var raise_btn: Button = UIKit.button("", UIKit.GOLD, UIKit.INK, 18)
+	col.add_child(raise_btn)
+
+	var set_text: Callable = func() -> void:
+		var verb: String = "Relancer à" if facing_bet else "Miser"
+		raise_btn.text = ("%s %d" % [verb, _raise_to]) + ("  (tapis)" if _raise_to >= hi else "")
+	set_text.call()
+
+	if hi > lo:
+		var slider: HSlider = HSlider.new()
+		slider.min_value = lo
+		slider.max_value = hi
+		slider.step = 1
+		slider.value = _raise_to
+		slider.custom_minimum_size = Vector2(0, 36)
+		slider.focus_mode = Control.FOCUS_NONE
+		col.add_child(slider)
+		slider.value_changed.connect(
+			func(v: float) -> void:
+				_raise_to = int(v)
+				set_text.call()
+		)
+
+		var quick: HBoxContainer = HBoxContainer.new()
+		quick.add_theme_constant_override("separation", 8)
+		var presets: Array[Array] = [
+			["½ pot", engine.raise_half_size()],
+			["Pot", engine.pot_size_bet()],
+			["Tapis", hi],
+		]
+		for preset: Array in presets:
+			var amount: int = clampi(int(preset[1]), lo, hi)
+			var b: Button = UIKit.outline_button(str(preset[0]), Color.WHITE, 14)
+			b.custom_minimum_size = Vector2(0, 40)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.pressed.connect(
+				func() -> void:
+					slider.value = amount
+			)
+			quick.add_child(b)
+		col.add_child(quick)
+
+	raise_btn.pressed.connect(
+		func() -> void: engine.bet_raise(PokerEngine.Actor.PLAYER, _raise_to)
+	)
+	return panel
 
 
 # --- Navigation -------------------------------------------------------------

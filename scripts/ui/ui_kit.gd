@@ -155,3 +155,66 @@ static func spacer(height: float) -> Control:
 	c.custom_minimum_size = Vector2(0, height)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return c
+
+
+# --- Décor et animations --------------------------------------------------------
+
+enum Banner { NEUTRAL, WIN, LOSE }
+
+
+## Table de jeu : cadre en bois autour d'un feutre vert qui contient `content`.
+static func table(content: Control, margin: int = 14) -> PanelContainer:
+	var rail: PanelContainer = PanelContainer.new()
+	var rail_style: StyleBoxFlat = box(Color(0.22, 0.12, 0.06), 30, Color(0.47, 0.3, 0.15), 2)
+	rail_style.set_content_margin_all(7)
+	rail_style.shadow_size = 12
+	rail_style.shadow_color = Color(0, 0, 0, 0.5)
+	rail_style.shadow_offset = Vector2(0, 5)
+	rail.add_theme_stylebox_override("panel", rail_style)
+	var felt: PanelContainer = panel(Color(0.067, 0.345, 0.19), 24, margin, Color(0.02, 0.2, 0.12, 1.0))
+	rail.add_child(felt)
+	felt.add_child(content)
+	return rail
+
+
+## Style d'une bannière de résultat (victoire, défaite, égalité).
+static func banner_style(kind: int) -> StyleBoxFlat:
+	var style: StyleBoxFlat
+	match kind:
+		Banner.WIN:
+			style = box(Color(0.05, 0.36, 0.18, 0.96), 14, GOLD, 2)
+		Banner.LOSE:
+			style = box(Color(0.42, 0.07, 0.07, 0.96), 14, Color(0.9, 0.35, 0.35, 0.8), 2)
+		_:
+			style = box(Color(0.1, 0.16, 0.26, 0.96), 14, Color(1, 1, 1, 0.25), 2)
+	style.set_content_margin_all(10)
+	return style
+
+
+## Fait « apparaître » un contrôle avec un petit rebond.
+static func pop(node: Control) -> void:
+	if not node.is_inside_tree():
+		return
+	node.pivot_offset = node.size / 2.0
+	node.scale = Vector2(0.85, 0.85)
+	var t: Tween = node.create_tween()
+	t.tween_property(node, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Fondu d'entrée d'un écran.
+static func fade_in(node: Control, duration: float = 0.25) -> void:
+	if not node.is_inside_tree():
+		return
+	node.modulate.a = 0.0
+	node.create_tween().tween_property(node, "modulate:a", 1.0, duration)
+
+
+## Texte « +120 » / « -45 » / « 0 ».
+static func signed(value: int) -> String:
+	return ("+%d" % value) if value > 0 else str(value)
+
+
+## Vibration courte (Android), si activée dans les réglages.
+static func haptic(enabled: bool, duration_ms: int) -> void:
+	if enabled:
+		Input.vibrate_handheld(duration_ms)

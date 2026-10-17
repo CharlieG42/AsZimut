@@ -50,8 +50,15 @@ func _run() -> void:
 		return
 	bank.persist = false
 	bank.value = 1000
+	var stats: StatsState = root.get_node_or_null("Stats") as StatsState
+	_check(stats != null, "autoload Stats présent")
+	if stats == null:
+		quit(1)
+		return
+	stats.persist = false
 
 	await _test_home(bank)
+	await _test_stats(stats)
 	await _test_blackjack(bank)
 	await _test_poker(bank)
 
@@ -84,6 +91,33 @@ func _test_home(bank: BankrollState) -> void:
 	await _unmount(home)
 
 
+func _test_stats(stats: StatsState) -> void:
+	stats.reset_stats()
+	stats.set_difficulty(1)
+	stats.record_blackjack(BlackjackEngine.Outcome.BLACKJACK, 150)
+	stats.record_blackjack(BlackjackEngine.Outcome.LOSE, -50)
+	stats.record_poker(PokerEngine.HandOutcome.WIN, 80, 160)
+	_check(stats.bj_rounds == 2 and stats.bj_wins == 1 and stats.bj_blackjacks == 1, "stats blackjack")
+	_check(stats.bj_net == 100 and stats.pk_biggest_pot == 160, "stats net / plus gros pot")
+	_check(StatsState.percent(1, 2) == 50 and StatsState.percent(0, 0) == 0, "pourcentages")
+
+	var screen: Node = _mount("res://scenes/stats.tscn")
+	await _frames(3)
+	_check(_press(screen, "Difficile"), "choix du niveau Difficile")
+	await _frames(2)
+	_check(stats.difficulty == 2, "difficulté enregistrée")
+	_check(_find_button(screen, "Confirmer l'effacement ?") == null, "pas de confirmation au départ")
+	_check(_press(screen, "Réinitialiser les stats"), "bouton réinitialiser")
+	await _frames(2)
+	_check(stats.bj_rounds == 2, "premier appui : rien n'est effacé")
+	_check(_press(screen, "Confirmer l'effacement ?"), "bouton confirmer")
+	await _frames(2)
+	_check(stats.bj_rounds == 0 and stats.pk_hands == 0, "stats effacées")
+	_check(stats.difficulty == 2, "réglages conservés après effacement")
+	stats.set_difficulty(1)
+	await _unmount(screen)
+
+
 func _test_blackjack(bank: BankrollState) -> void:
 	var screen: Node = _mount("res://scenes/blackjack.tscn")
 	await _frames(3)
@@ -98,7 +132,7 @@ func _test_blackjack(bank: BankrollState) -> void:
 			bank.set_to(1000)  # recharge simulée (depuis l'accueil dans le vrai jeu)
 		engine.clear_bet()
 		screen.call("_refresh")
-		_check(_press(screen, "+25"), "bouton +25")
+		_check(_press(screen, "25"), "jeton 25")
 		await _frames(1)
 		_check(_press(screen, "Distribuer"), "bouton Distribuer")
 		await _frames(2)
@@ -155,10 +189,16 @@ func _test_poker(bank: BankrollState) -> void:
 			var call_btn: Button = _find_button(screen, "Checker")
 			if call_btn == null:
 				call_btn = _find_button_prefix(screen, "Suivre")
-			if hands_done % 4 == 1:
-				acted = _press(screen, "Pot")
-			elif hands_done % 7 == 3:
-				acted = _press(screen, "Tapis")
+			if hands_done % 4 == 1 or hands_done % 7 == 3:
+				# Les raccourcis déplacent le curseur ; le gros bouton valide la relance.
+				var preset: String = "Pot" if hands_done % 4 == 1 else "Tapis"
+				if _press(screen, preset):
+					var raise_btn: Button = _find_button_prefix(screen, "Relancer à")
+					if raise_btn == null:
+						raise_btn = _find_button_prefix(screen, "Miser")
+					if raise_btn != null:
+						raise_btn.pressed.emit()
+						acted = true
 			elif hands_done % 5 == 4:
 				acted = _press(screen, "Coucher")
 			if not acted and call_btn != null:

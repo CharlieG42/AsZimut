@@ -3,8 +3,11 @@ extends RefCounted
 ## Moteur Blackjack : règles + croupier IA (tire jusqu'à 17).
 
 signal changed
+## Émis après `changed` quand la manche se termine (`net` = gain/perte sur la manche).
+signal round_finished(outcome: Outcome, net: int)
 
 enum Phase { BET, PLAYER, DEALER, DONE }
+enum Outcome { NONE, WIN, LOSE, PUSH, BLACKJACK }
 
 const MIN_BET: int = 10
 
@@ -15,6 +18,8 @@ var phase: Phase = Phase.BET
 var bet: int = 0
 var message: String = ""
 var revealed: bool = false
+var outcome: Outcome = Outcome.NONE
+var net: int = 0
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _bankroll: BankrollState
@@ -67,6 +72,8 @@ func deal() -> void:
 	dealer = [deck.pop_back(), deck.pop_back()]
 	revealed = false
 	message = ""
+	outcome = Outcome.NONE
+	net = 0
 	phase = Phase.DEALER if bj_value(player) == 21 else Phase.PLAYER
 	changed.emit()
 
@@ -77,10 +84,10 @@ func hit() -> void:
 	player.append(deck.pop_back())
 	var v: int = bj_value(player)
 	if v > 21:
-		revealed = true
-		message = "Vous dépassez (%d). Mise perdue." % v
-		phase = Phase.DONE
-	elif v == 21:
+		_finish(Outcome.LOSE, 0, "Vous dépassez (%d). Mise perdue." % v)
+		_notify_finished()
+		return
+	if v == 21:
 		phase = Phase.DEALER
 	changed.emit()
 
@@ -104,11 +111,10 @@ func double_down() -> void:
 	player.append(deck.pop_back())
 	var v: int = bj_value(player)
 	if v > 21:
-		revealed = true
-		message = "Vous dépassez (%d). Mise perdue." % v
-		phase = Phase.DONE
-	else:
-		phase = Phase.DEALER
+		_finish(Outcome.LOSE, 0, "Vous dépassez (%d). Mise perdue." % v)
+		_notify_finished()
+		return
+	phase = Phase.DEALER
 	changed.emit()
 
 
@@ -118,10 +124,24 @@ func dealer_plays() -> void:
 		return
 	while bj_value(dealer) < 17 and not deck.is_empty():
 		dealer.append(deck.pop_back())
-	revealed = true
 	_resolve()
-	phase = Phase.DONE
+	_notify_finished()
+
+
+func _notify_finished() -> void:
 	changed.emit()
+	round_finished.emit(outcome, net)
+
+
+## Termine la manche : crédite `payout`, mémorise l'issue et le gain net.
+func _finish(result: Outcome, payout: int, text: String) -> void:
+	revealed = true
+	outcome = result
+	message = text
+	net = payout - bet
+	if payout > 0:
+		_bankroll.add(payout)
+	phase = Phase.DONE
 
 
 func _resolve() -> void:
@@ -129,30 +149,22 @@ func _resolve() -> void:
 	var dv: int = bj_value(dealer)
 	var p_nat: bool = player.size() == 2 and pv == 21
 	var d_nat: bool = dealer.size() == 2 and dv == 21
-	var payout: int = 0
 	if p_nat and d_nat:
-		payout = bet
-		message = "Double blackjack — égalité, mise remboursée."
+		_finish(Outcome.PUSH, bet, "Double blackjack — égalité, mise remboursée.")
 	elif p_nat:
-		payout = roundi(bet * 2.5)
-		message = "Blackjack ! Vous gagnez %d." % roundi(bet * 1.5)
+		_finish(Outcome.BLACKJACK, roundi(bet * 2.5), "Blackjack ! Vous gagnez %d." % roundi(bet * 1.5))
 	elif d_nat:
-		message = "Blackjack du croupier — mise perdue."
+		_finish(Outcome.LOSE, 0, "Blackjack du croupier — mise perdue.")
 	elif pv > 21:
-		message = "Vous dépassez (%d). Mise perdue." % pv
+		_finish(Outcome.LOSE, 0, "Vous dépassez (%d). Mise perdue." % pv)
 	elif dv > 21:
-		payout = bet * 2
-		message = "Le croupier crève (%d) ! Vous gagnez %d." % [dv, bet]
+		_finish(Outcome.WIN, bet * 2, "Le croupier crève (%d) ! Vous gagnez %d." % [dv, bet])
 	elif pv > dv:
-		payout = bet * 2
-		message = "%d contre %d — vous gagnez %d !" % [pv, dv, bet]
+		_finish(Outcome.WIN, bet * 2, "%d contre %d — vous gagnez %d !" % [pv, dv, bet])
 	elif pv < dv:
-		message = "%d contre %d — le croupier gagne." % [pv, dv]
+		_finish(Outcome.LOSE, 0, "%d contre %d — le croupier gagne." % [pv, dv])
 	else:
-		payout = bet
-		message = "Égalité — mise remboursée."
-	if payout > 0:
-		_bankroll.add(payout)
+		_finish(Outcome.PUSH, bet, "Égalité — mise remboursée.")
 
 
 func replay() -> void:
@@ -161,6 +173,8 @@ func replay() -> void:
 	dealer = []
 	message = ""
 	revealed = false
+	outcome = Outcome.NONE
+	net = 0
 	bet = next_bet
 	phase = Phase.BET
 	changed.emit()

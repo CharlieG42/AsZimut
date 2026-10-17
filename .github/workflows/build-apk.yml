@@ -8,6 +8,11 @@ on:
 env:
   GODOT_VERSION: "4.4.1"
 
+# Un nouveau push annule le build précédent encore en cours.
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -64,39 +69,80 @@ jobs:
       - name: Test de fumée de l'interface
         run: godot --headless --path . --script res://tests/smoke_test.gd
 
-      - name: Clé de signature
+      - name: Clé de signature (secrets si valides, sinon clé temporaire)
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KS_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          set -e
+          set -u
           KS_FILE="$RUNNER_TEMP/aszimut-release.keystore"
-          if [ -n "$KS_B64" ]; then
-            echo "Clé de signature fournie par les secrets du dépôt."
-            echo "$KS_B64" | base64 -d > "$KS_FILE"
-            ALIAS="$KS_ALIAS"
-            PASS="$KS_PASS"
+          MODE="temporaire"
+          REASON="aucun secret de signature"
+
+          if [ -n "${KS_B64}" ] && [ -n "${KS_ALIAS}" ] && [ -n "${KS_PASS}" ]; then
+            # Les trois secrets existent : on vérifie qu'ils ouvrent bien la clé.
+            if echo "${KS_B64}" | base64 -d > "$KS_FILE" 2>/dev/null \
+               && keytool -list -keystore "$KS_FILE" -storepass "${KS_PASS}" -alias "${KS_ALIAS}" > /dev/null 2>&1; then
+              MODE="secrets"
+            else
+              REASON="secrets présents mais inutilisables (base64, alias ou mot de passe incorrect)"
+              echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
+            fi
+          elif [ -n "${KS_B64}${KS_ALIAS}${KS_PASS}" ]; then
+            REASON="secrets incomplets (il faut les trois)"
+            echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
+          fi
+
+          if [ "$MODE" = "secrets" ]; then
+            ALIAS="${KS_ALIAS}"
+            PASS="${KS_PASS}"
+            echo "Signature avec la clé des secrets du dépôt."
           else
-            echo "::warning::Aucune clé dans les secrets : une clé temporaire est générée. Chaque APK a une signature différente (désinstaller l'ancienne version avant d'installer la nouvelle). Voir le README pour fixer une clé."
+            rm -f "$KS_FILE"
             ALIAS="aszimut"
             PASS="aszimut-ci"
             keytool -genkeypair -v -keystore "$KS_FILE" -alias "$ALIAS" \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$PASS" -keypass "$PASS" \
               -dname "CN=AsZimut,O=WildZimut,C=FR" > /dev/null
+            echo "::notice::Signature avec une clé temporaire (${REASON}). Chaque build a une signature différente : désinstaller l'ancienne version avant d'installer la nouvelle."
           fi
+
           {
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS_FILE"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$ALIAS"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$PASS"
+            echo "SIGN_MODE=$MODE"
           } >> "$GITHUB_ENV"
+
+      - name: Numéro de version
+        run: |
+          set -eu
+          VERSION="$(grep -m1 '^config/version=' project.godot | cut -d'"' -f2)"
+          VERSION="${VERSION:-0.0.0}"
+          sed -i "s|^version/code=.*|version/code=${GITHUB_RUN_NUMBER}|" export_presets.cfg
+          sed -i "s|^version/name=.*|version/name=\"${VERSION}\"|" export_presets.cfg
+          grep -E '^version/(code|name)=' export_presets.cfg
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Export de l'APK (release)
         run: |
           mkdir -p build
           godot --headless --path . --export-release "Android" build/aszimut.apk
           ls -l build/
+
+      - name: Résumé
+        run: |
+          {
+            echo "### AsZimut ${APP_VERSION} (build ${GITHUB_RUN_NUMBER})"
+            if [ "${SIGN_MODE}" = "secrets" ]; then
+              echo "- Signature : **clé des secrets du dépôt** (mises à jour installables par-dessus)."
+            else
+              echo "- Signature : **clé temporaire** — désinstaller l'ancienne version avant d'installer celle-ci."
+            fi
+            echo "- Artefact : \`aszimut-release-apk\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publication de l'APK
         uses: actions/upload-artifact@v4

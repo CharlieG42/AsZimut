@@ -15,11 +15,14 @@ var _message_panel: PanelContainer
 var _message_label: Label
 var _controls: VBoxContainer
 var _dealer_timer: Timer
+var _last_message: String = ""
+var _bet_pile: ChipPile
 
 
 func _ready() -> void:
 	engine = BlackjackEngine.new(Bankroll)
 	engine.changed.connect(_refresh)
+	engine.round_finished.connect(_on_round_finished)
 
 	_dealer_timer = Timer.new()
 	_dealer_timer.one_shot = true
@@ -51,6 +54,7 @@ func _ready() -> void:
 	col.add_child(_controls)
 
 	_refresh()
+	UIKit.fade_in(self)
 
 
 func _build_top_bar() -> Control:
@@ -71,10 +75,9 @@ func _build_top_bar() -> Control:
 
 
 func _build_felt() -> Control:
-	var felt: PanelContainer = UIKit.panel(UIKit.FELT_GREEN, 24, 16, Color(0.024, 0.306, 0.231, 1.0))
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	felt.add_child(col)
+	var felt: PanelContainer = UIKit.table(col, 16)
 
 	col.add_child(UIKit.label("CROUPIER", 12, UIKit.TEXT_SOFT, true))
 	_dealer_row = CardRow.new(1.0, 2)
@@ -90,8 +93,9 @@ func _build_felt() -> Control:
 	_player_total = UIKit.chip("0")
 	col.add_child(_centered(_player_total))
 
-	_message_panel = UIKit.panel(Color(0, 0, 0, 0.4), 12, 10)
-	_message_label = UIKit.label("", 14, UIKit.GOLD, true)
+	_message_panel = PanelContainer.new()
+	_message_panel.add_theme_stylebox_override("panel", UIKit.banner_style(UIKit.Banner.NEUTRAL))
+	_message_label = UIKit.label("", 15, Color.WHITE, true)
 	_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message_panel.add_child(_message_label)
 	col.add_child(_message_panel)
@@ -106,7 +110,7 @@ func _centered(node: Control) -> HBoxContainer:
 
 
 func _refresh() -> void:
-	_bank.set_amount(Bankroll.value)
+	_bank.set_amount(Bankroll.value, true)
 
 	var hide_flags: Array[bool] = [false, not engine.revealed]
 	_dealer_row.set_cards(engine.dealer, hide_flags)
@@ -124,10 +128,33 @@ func _refresh() -> void:
 
 	_message_panel.visible = engine.message != ""
 	_message_label.text = engine.message
+	_message_panel.add_theme_stylebox_override("panel", UIKit.banner_style(_banner_kind()))
+	if engine.message != _last_message:
+		_last_message = engine.message
+		if engine.message != "":
+			UIKit.pop(_message_panel)
 
 	_rebuild_controls()
 	if engine.phase == BlackjackEngine.Phase.DEALER and _dealer_timer.is_stopped():
 		_dealer_timer.start()
+
+
+func _banner_kind() -> int:
+	match engine.outcome:
+		BlackjackEngine.Outcome.WIN, BlackjackEngine.Outcome.BLACKJACK:
+			return UIKit.Banner.WIN
+		BlackjackEngine.Outcome.LOSE:
+			return UIKit.Banner.LOSE
+	return UIKit.Banner.NEUTRAL
+
+
+func _on_round_finished(outcome: int, net: int) -> void:
+	Stats.record_blackjack(outcome, net)
+	match outcome:
+		BlackjackEngine.Outcome.WIN, BlackjackEngine.Outcome.BLACKJACK:
+			UIKit.haptic(Stats.haptics, 60)
+		BlackjackEngine.Outcome.LOSE:
+			UIKit.haptic(Stats.haptics, 140)
 
 
 func _rebuild_controls() -> void:
@@ -156,23 +183,24 @@ func _build_bet_panel() -> Control:
 	panel.add_child(col)
 
 	var head: HBoxContainer = HBoxContainer.new()
-	head.add_child(UIKit.label("Mise :", 16, Color.WHITE, true))
-	var amount: CoinLabel = CoinLabel.new(18, UIKit.GOLD)
-	amount.set_amount(engine.bet)
-	amount.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(amount)
+	head.add_child(UIKit.label("Mise", 16, Color.WHITE, true))
+	_bet_pile = ChipPile.new(150)
+	_bet_pile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bet_pile.set_amount(engine.bet)
+	head.add_child(_bet_pile)
 	if engine.bet > 0:
 		var clear: Button = UIKit.outline_button("Effacer", UIKit.TEXT_SOFT, 14)
 		clear.custom_minimum_size = Vector2(90, 40)
+		clear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		clear.pressed.connect(engine.clear_bet)
 		head.add_child(clear)
 	col.add_child(head)
 
 	var chips: HBoxContainer = HBoxContainer.new()
-	chips.add_theme_constant_override("separation", 8)
+	chips.alignment = BoxContainer.ALIGNMENT_CENTER
+	chips.add_theme_constant_override("separation", 10)
 	for v: int in CHIP_VALUES:
-		var chip_btn: Button = UIKit.outline_button("+%d" % v, Color.WHITE, 17)
-		chip_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var chip_btn: ChipButton = ChipButton.new(v)
 		chip_btn.disabled = engine.bet + v > Bankroll.value
 		chip_btn.pressed.connect(engine.add_to_bet.bind(v))
 		chips.add_child(chip_btn)

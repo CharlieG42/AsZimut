@@ -3,12 +3,14 @@ extends Control
 
 const BLACKJACK_SCENE: String = "res://scenes/blackjack.tscn"
 const POKER_SCENE: String = "res://scenes/poker.tscn"
+const STATS_SCENE: String = "res://scenes/stats.tscn"
 const POKER_MIN_BANK: int = 20
 
 var _bank: CoinLabel
 var _reload_button: Button
 var _poker_card: GameCard
 var _poker_hint: Label
+var _best: Label
 var _logo: Control
 var _logo_cards: Array[CardView] = []
 
@@ -56,6 +58,9 @@ func _ready() -> void:
 	_bank = CoinLabel.new(18, UIKit.GOLD, "Banque :")
 	pill.add_child(_bank)
 
+	_best = UIKit.label("", 12, UIKit.TEXT_SOFT)
+	col.add_child(_best)
+
 	_reload_button = UIKit.outline_button("Recharger la banque (1000)", UIKit.GOLD, 16)
 	_reload_button.pressed.connect(func() -> void: Bankroll.reset())
 	col.add_child(_reload_button)
@@ -84,8 +89,19 @@ func _ready() -> void:
 	_poker_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_poker_hint)
 
+	var spacer_fill: Control = Control.new()
+	spacer_fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(spacer_fill)
+
+	var stats_btn: Button = UIKit.outline_button("Statistiques & réglages", UIKit.TEXT_SOFT, 16)
+	stats_btn.pressed.connect(_open.bind(STATS_SCENE))
+	col.add_child(stats_btn)
+	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
+	col.add_child(UIKit.label("v%s" % version, 11, UIKit.TEXT_SOFT))
+
 	Bankroll.changed.connect(_refresh)
 	_refresh()
+	UIKit.fade_in(self)
 
 
 func _layout_logo() -> void:
@@ -101,6 +117,7 @@ func _layout_logo() -> void:
 
 func _refresh() -> void:
 	_bank.set_amount(Bankroll.value)
+	_best.text = "Record : %d" % Bankroll.best
 	_reload_button.visible = Bankroll.value < BlackjackEngine.MIN_BET
 	var can_poker: bool = Bankroll.value >= POKER_MIN_BANK
 	_poker_card.set_enabled(can_poker)

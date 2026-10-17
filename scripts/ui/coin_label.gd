@@ -5,6 +5,8 @@ extends HBoxContainer
 var _prefix: Label
 var _icon: Control
 var _amount: Label
+var _shown: int = 0
+var _tween: Tween
 
 
 func _init(font_size: int = 16, color: Color = UIKit.GOLD, prefix: String = "") -> void:
@@ -27,8 +29,25 @@ func _init(font_size: int = 16, color: Color = UIKit.GOLD, prefix: String = "") 
 	add_child(_amount)
 
 
-func set_amount(value: int) -> void:
-	_amount.text = str(value)
+## Affiche `value` ; avec `animate`, le compteur défile jusqu'à la nouvelle valeur.
+func set_amount(value: int, animate: bool = false) -> void:
+	if _tween != null and _tween.is_valid():
+		_tween.kill()
+	if not animate or not is_inside_tree() or value == _shown:
+		_show_value(value)
+		return
+	_tween = create_tween()
+	_tween.tween_method(_show_tween, float(_shown), float(value), 0.45).set_ease(Tween.EASE_OUT)
+	_tween.tween_callback(_show_value.bind(value))
+
+
+func _show_tween(v: float) -> void:
+	_show_value(roundi(v))
+
+
+func _show_value(v: int) -> void:
+	_shown = v
+	_amount.text = str(v)
 
 
 func _draw_coin() -> void:

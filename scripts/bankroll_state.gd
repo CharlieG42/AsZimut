@@ -9,6 +9,8 @@ const START_VALUE: int = 1000
 const SAVE_PATH: String = "user://aszimut.cfg"
 
 var value: int = START_VALUE
+## Plus haute banque atteinte.
+var best: int = START_VALUE
 ## Désactivé dans les tests pour ne pas écrire sur le disque.
 var persist: bool = true
 
@@ -34,6 +36,7 @@ func reset() -> void:
 
 
 func _commit() -> void:
+	best = maxi(best, value)
 	_save()
 	changed.emit()
 
@@ -44,6 +47,7 @@ func _load() -> void:
 	var cfg: ConfigFile = ConfigFile.new()
 	if cfg.load(SAVE_PATH) == OK:
 		value = maxi(0, int(cfg.get_value("bank", "value", START_VALUE)))
+		best = maxi(value, int(cfg.get_value("bank", "best", START_VALUE)))
 		changed.emit()
 
 
@@ -52,4 +56,5 @@ func _save() -> void:
 		return
 	var cfg: ConfigFile = ConfigFile.new()
 	cfg.set_value("bank", "value", value)
+	cfg.set_value("bank", "best", best)
 	cfg.save(SAVE_PATH)

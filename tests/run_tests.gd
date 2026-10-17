@@ -11,10 +11,13 @@ func _initialize() -> void:
 	_test_cards()
 	_test_evaluator_known_hands()
 	_test_evaluator_matches_reference()
+	_test_describe()
 	_test_chen()
 	_test_blackjack_values()
 	_test_blackjack_simulation()
 	_test_poker_simulation()
+	_test_poker_difficulty()
+	_test_raise_bounds()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -178,6 +181,12 @@ func _test_blackjack_simulation() -> void:
 	var engine: BlackjackEngine = BlackjackEngine.new(bank)
 	engine.rng.seed = 5
 	var ok: bool = true
+	var counters: Dictionary = {"finished": 0, "net": 0}
+	engine.round_finished.connect(
+		func(_o: BlackjackEngine.Outcome, n: int) -> void:
+			counters["finished"] = int(counters["finished"]) + 1
+			counters["net"] = int(counters["net"]) + n
+	)
 	for _round: int in 400:
 		if bank.value < 10:
 			bank.set_to(1000)
@@ -205,14 +214,15 @@ func _test_blackjack_simulation() -> void:
 		if engine.phase != BlackjackEngine.Phase.DONE or engine.message == "":
 			ok = false
 			break
-		# La banque ne peut varier que dans [-2*mise, +1.5*mise] autour de l'état initial.
+		# Le gain net annoncé est exactement la variation de la banque.
 		var delta: int = bank.value - before
-		if delta < -engine.bet or delta > roundi(engine.bet * 1.5):
+		if delta != engine.net or engine.outcome == BlackjackEngine.Outcome.NONE:
 			ok = false
-			printerr("  delta=%d mise=%d msg=%s" % [delta, engine.bet, engine.message])
+			printerr("  delta=%d net=%d mise=%d msg=%s" % [delta, engine.net, engine.bet, engine.message])
 			break
 		engine.replay()
 	_check(ok, "simulation blackjack (400 tours) cohérente")
+	_check(int(counters["finished"]) == 400, "un signal round_finished par manche (%d)" % int(counters["finished"]))
 	_check(bank.value >= 0, "banque jamais négative")
 	bank.free()
 
@@ -228,6 +238,10 @@ func _test_poker_simulation() -> void:
 	var violations: int = 0
 	var hands: int = 150
 	var finished: int = 0
+	var sig: Dictionary = {"n": 0}
+	engine.hand_finished.connect(
+		func(_o: PokerEngine.HandOutcome, _n: int, _p: int) -> void: sig["n"] = int(sig["n"]) + 1
+	)
 	for h: int in hands:
 		if engine.p_stack <= 0:
 			engine.p_stack = 1000
@@ -262,8 +276,95 @@ func _test_poker_simulation() -> void:
 				break
 		if engine.is_over():
 			finished += 1
+			if engine.last_net != engine.p_stack - engine.hand_start_stack:
+				violations += 1
+				printerr("  gain net incohérent : %d vs %d" % [engine.last_net, engine.p_stack - engine.hand_start_stack])
 			if engine.pot != 0:
 				violations += 1
 				printerr("  pot non vidé en fin de main : %d" % engine.pot)
 	_check(violations == 0, "simulation poker : jetons conservés, aucun blocage (%d violations)" % violations)
 	_check(finished == hands, "toutes les mains se terminent (%d/%d)" % [finished, hands])
+	_check(int(sig["n"]) == hands, "un signal hand_finished par main (%d/%d)" % [int(sig["n"]), hands])
+
+
+# --- Nouveautés ------------------------------------------------------------------
+
+
+func _test_describe() -> void:
+	var S: int = Cards.Suit.SPADES
+	var H: int = Cards.Suit.HEARTS
+	var D: int = Cards.Suit.DIAMONDS
+	var C: int = Cards.Suit.CLUBS
+	var cases: Array = [
+		[[[13, S], [13, H], [9, D], [5, C], [2, S]], "Paire de Rois"],
+		[[[14, S], [14, H], [9, D], [5, C], [2, S]], "Paire d'As"],
+		[[[7, S], [7, H], [7, D], [5, C], [2, S]], "Brelan de 7"],
+		[[[12, S], [11, H], [10, D], [9, C], [8, S]], "Quinte à la Dame"],
+		[[[14, S], [13, S], [9, S], [5, S], [2, S]], "Couleur à l'As"],
+		[[[9, S], [9, H], [9, D], [4, C], [4, S]], "Full 9 par 4"],
+		[[[14, S], [14, H], [14, D], [14, C], [2, S]], "Carré d'As"],
+		[[[14, S], [13, S], [12, S], [11, S], [10, S]], "Quinte flush royale"],
+		[[[14, S], [9, H], [7, D], [4, C], [2, S]], "Hauteur As"],
+		[[[13, S], [13, H], [4, D], [4, C], [2, S]], "Double paire Rois et 4"],
+	]
+	for case: Array in cases:
+		var got: String = HandEvaluator.describe(HandEvaluator.evaluate5(_hand(case[0])))
+		_check(got == String(case[1]), "describe : « %s » attendu, obtenu « %s »" % [case[1], got])
+	# Avec moins de 5 cartes (pré-flop), l'évaluation reste utilisable.
+	var preflop: Array[int] = HandEvaluator.evaluate7(_hand([[13, S], [13, H]]))
+	_check(HandEvaluator.describe(preflop) == "Paire de Rois", "describe pré-flop : paire de Rois")
+
+
+func _test_poker_difficulty() -> void:
+	_check(PokerEngine.PROFILES.size() == 3, "trois niveaux de ZIA")
+	_check(PokerEngine.difficulty_name(0) == "Facile", "nom du niveau 0")
+	_check(PokerEngine.difficulty_name(2) == "Difficile", "nom du niveau 2")
+	# Chaque niveau joue des mains complètes sans blocage.
+	for level: int in 3:
+		var engine: PokerEngine = PokerEngine.new(1000, level)
+		engine.rng.seed = 500 + level
+		_check(engine.difficulty == level, "niveau %d appliqué" % level)
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 900 + level
+		var done: int = 0
+		for h: int in 25:
+			if engine.p_stack <= 0:
+				engine.p_stack = 1000
+			if h > 0:
+				engine.start_hand(false)
+			var steps: int = 0
+			while not engine.is_over() and steps < 120:
+				steps += 1
+				if engine.is_player_turn():
+					if rng.randf() < 0.7:
+						engine.check_call(PokerEngine.Actor.PLAYER)
+					else:
+						engine.bet_raise(PokerEngine.Actor.PLAYER, engine.pot_size_bet())
+				elif engine.to_act == PokerEngine.Actor.AI:
+					engine.ai_act()
+				elif engine.runout:
+					engine.advance_street()
+				else:
+					break
+			if engine.is_over():
+				done += 1
+		_check(done == 25, "niveau %d : 25 mains terminées (%d)" % [level, done])
+	# Un niveau hors bornes est ramené dans la plage.
+	_check(PokerEngine.new(1000, 99).difficulty == 2, "niveau borné à 2")
+
+
+func _test_raise_bounds() -> void:
+	var engine: PokerEngine = PokerEngine.new(1000)
+	engine.rng.seed = 11
+	# Après les blinds, le joueur doit au moins doubler la grosse blinde.
+	var mn: int = engine.min_raise_to(PokerEngine.Actor.PLAYER)
+	var mx: int = engine.max_raise_to(PokerEngine.Actor.PLAYER)
+	_check(mn >= PokerEngine.BB, "relance minimale ≥ grosse blinde (%d)" % mn)
+	_check(mx == engine.p_bet + engine.p_stack, "relance maximale = tapis (%d)" % mx)
+	_check(mn <= mx, "min ≤ max")
+	# Relancer à une valeur trop faible est ramené au minimum ; trop forte, au tapis.
+	if engine.is_player_turn():
+		var before: int = engine.p_bet
+		engine.bet_raise(PokerEngine.Actor.PLAYER, 1)
+		_check(engine.p_bet >= mn or engine.p_bet == mx, "relance trop faible relevée au minimum")
+		_check(engine.p_bet > before, "la relance augmente la mise")

@@ -3,16 +3,26 @@ extends RefCounted
 ## Moteur Poker Texas Hold'em heads-up contre l'IA « ZIA ».
 
 signal changed
+## Émis après `changed` quand la main se termine (`net` = gain/perte du joueur sur la main).
+signal hand_finished(outcome: HandOutcome, net: int, pot_won: int)
 
 enum Street { PREFLOP, FLOP, TURN, RIVER, ENDED }
 enum Actor { PLAYER, AI, NONE }
+enum HandOutcome { WIN, LOSE, SPLIT }
 
 const SB: int = 10
 const BB: int = 20
 const AI_BUY_IN: int = 500
-const MC_ITERATIONS: int = 200
+## Niveaux de ZIA : simulations Monte-Carlo, fréquence de bluff, seuil de mise pour la valeur,
+## bruit sur l'estimation (une IA facile se trompe), marge exigée sur la cote du pot.
+const PROFILES: Array[Dictionary] = [
+	{"name": "Facile", "iters": 60, "bluff": 0.05, "value_p": 0.70, "noise": 0.14, "margin": -0.02},
+	{"name": "Normal", "iters": 200, "bluff": 0.13, "value_p": 0.62, "noise": 0.0, "margin": 0.02},
+	{"name": "Difficile", "iters": 450, "bluff": 0.18, "value_p": 0.58, "noise": 0.0, "margin": 0.03},
+]
 
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var difficulty: int = 1
 
 var deck: Array[int] = []
 var board: Array[int] = []
@@ -34,12 +44,43 @@ var reveal_ai: bool = false
 ## Texte du résultat de la main ; vide tant que la main est en cours.
 var result: String = ""
 var log_lines: Array[String] = []
+## Pile du joueur au début de la main (avant les blinds) et issue de la dernière main.
+var hand_start_stack: int = 0
+var last_outcome: HandOutcome = HandOutcome.WIN
+var last_net: int = 0
+var last_pot: int = 0
+
+var _finish_pending: bool = false
 
 
-func _init(buy_in: int) -> void:
+func _init(buy_in: int, level: int = 1) -> void:
 	rng.randomize()
+	difficulty = clampi(level, 0, PROFILES.size() - 1)
 	p_stack = buy_in
 	start_hand(true)
+
+
+static func difficulty_name(level: int) -> String:
+	return str(PROFILES[clampi(level, 0, PROFILES.size() - 1)]["name"])
+
+
+func profile() -> Dictionary:
+	return PROFILES[difficulty]
+
+
+## Émet `changed`, puis `hand_finished` si la main vient de se terminer.
+func _notify() -> void:
+	changed.emit()
+	if _finish_pending:
+		_finish_pending = false
+		hand_finished.emit(last_outcome, last_net, last_pot)
+
+
+func _close_hand(outcome: HandOutcome, pot_won: int) -> void:
+	last_outcome = outcome
+	last_net = p_stack - hand_start_stack
+	last_pot = pot_won
+	_finish_pending = true
 
 
 # --- Accesseurs -------------------------------------------------------------
@@ -70,6 +111,20 @@ func pot_size_bet() -> int:
 	return a_bet + pot
 
 
+## Plus petite relance autorisée (« relancer à »), plafonnée au tapis.
+func min_raise_to(who: Actor = Actor.PLAYER) -> int:
+	var my_bet: int = p_bet if who == Actor.PLAYER else a_bet
+	var other_bet: int = a_bet if who == Actor.PLAYER else p_bet
+	var diff: int = other_bet - my_bet
+	var m: int = other_bet + maxi(BB, diff) if other_bet > 0 else BB
+	return mini(m, max_raise_to(who))
+
+
+## Tapis : tout ce que `who` peut miser sur ce tour d'enchères.
+func max_raise_to(who: Actor = Actor.PLAYER) -> int:
+	return p_bet + p_stack if who == Actor.PLAYER else a_bet + a_stack
+
+
 func street_label() -> String:
 	match street:
 		Street.PREFLOP:
@@ -94,6 +149,8 @@ func _log(msg: String) -> void:
 
 
 func start_hand(first: bool = false) -> void:
+	hand_start_stack = p_stack
+	_finish_pending = false
 	dealer_is_player = rng.randi() % 2 == 0 if first else not dealer_is_player
 	deck = Cards.shuffled_deck(rng)
 	board = []
@@ -139,7 +196,7 @@ func start_hand(first: bool = false) -> void:
 		runout = true
 		to_act = Actor.NONE
 		reveal_ai = true
-	changed.emit()
+	_notify()
 
 
 ## Rembourse la part non couverte quand un tapis ne peut pas être suivi.
@@ -168,16 +225,25 @@ func showdown() -> void:
 	street = Street.ENDED
 	if c > 0:
 		p_stack += won
-		result = "Vous gagnez %d avec %s !" % [won, HandEvaluator.hand_name(p_score)]
+		result = "Vous gagnez %d avec %s !" % [won, HandEvaluator.describe(p_score)]
+		_close_hand(HandOutcome.WIN, won)
 	elif c < 0:
 		a_stack += won
-		result = "ZIA gagne %d avec %s." % [won, HandEvaluator.hand_name(a_score)]
+		result = "ZIA gagne %d avec %s." % [won, HandEvaluator.describe(a_score)]
+		_close_hand(HandOutcome.LOSE, won)
 	else:
+		@warning_ignore("integer_division")
 		var half: int = won / 2
 		p_stack += half + won % 2
 		a_stack += half
-		result = "Égalité — pot partagé (%s)." % HandEvaluator.hand_name(p_score)
+		result = "Égalité — pot partagé (%s)." % HandEvaluator.describe(p_score)
+		_close_hand(HandOutcome.SPLIT, won)
 	_log("Abattage : " + result)
+
+
+## Description de la meilleure main actuelle de `hole` avec le board.
+func describe_hand(hole: Array[int]) -> String:
+	return HandEvaluator.describe(_best_hand(hole))
 
 
 func _best_hand(hole: Array[int]) -> Array[int]:
@@ -191,7 +257,7 @@ func advance_street() -> void:
 		return
 	if street == Street.RIVER:
 		showdown()
-		changed.emit()
+		_notify()
 		return
 	if street == Street.PREFLOP:
 		board.append(deck.pop_back())
@@ -217,7 +283,7 @@ func advance_street() -> void:
 		# Après le flop, la grosse blinde (non-donneur) parle en premier.
 		to_act = Actor.AI if dealer_is_player else Actor.PLAYER
 	_log(street_label() + ".")
-	changed.emit()
+	_notify()
 
 
 func fold(who: Actor) -> void:
@@ -227,13 +293,15 @@ func fold(who: Actor) -> void:
 		a_stack += won
 		result = "Vous vous couchez — ZIA remporte %d." % won
 		_log("Vous vous couchez.")
+		_close_hand(HandOutcome.LOSE, won)
 	else:
 		p_stack += won
 		result = "ZIA se couche — vous remportez %d !" % won
 		_log("ZIA se couche.")
+		_close_hand(HandOutcome.WIN, won)
 	street = Street.ENDED
 	to_act = Actor.NONE
-	changed.emit()
+	_notify()
 
 
 ## Le joueur quitte la table en pleine main : il abandonne le pot.
@@ -263,7 +331,7 @@ func check_call(who: Actor) -> void:
 			advance_street()
 			return
 		to_act = other
-		changed.emit()
+		_notify()
 		return
 
 	var my_stack: int = p_stack if who == Actor.PLAYER else a_stack
@@ -293,27 +361,22 @@ func check_call(who: Actor) -> void:
 		runout = true
 		reveal_ai = true
 		to_act = Actor.NONE
-		changed.emit()
+		_notify()
 		return
 	var other_acted: bool = acted_a if who == Actor.PLAYER else acted_p
 	if other_acted:
 		advance_street()
 		return
 	to_act = other
-	changed.emit()
+	_notify()
 
 
 func bet_raise(who: Actor, raise_to_raw: int) -> void:
 	var other: Actor = Actor.AI if who == Actor.PLAYER else Actor.PLAYER
 	var my_bet: int = p_bet if who == Actor.PLAYER else a_bet
 	var other_bet: int = a_bet if who == Actor.PLAYER else p_bet
-	var my_stack: int = p_stack if who == Actor.PLAYER else a_stack
-	var diff: int = other_bet - my_bet
-	var min_raise_to: int = other_bet + maxi(BB, diff) if other_bet > 0 else BB
-	var raise_to: int = maxi(raise_to_raw, min_raise_to)
-	var max_raise_to: int = my_bet + my_stack
-	if raise_to > max_raise_to:
-		raise_to = max_raise_to  # tapis
+	var raise_to: int = maxi(raise_to_raw, min_raise_to(who))
+	raise_to = mini(raise_to, max_raise_to(who))  # tapis
 	if raise_to <= other_bet:
 		check_call(who)
 		return
@@ -333,27 +396,33 @@ func bet_raise(who: Actor, raise_to_raw: int) -> void:
 	to_act = other
 	if (p_stack if who == Actor.PLAYER else a_stack) == 0:
 		reveal_ai = true
-	changed.emit()
+	_notify()
 
 
-## Tour de l'IA : Chen pré-flop, Monte-Carlo ensuite, cote du pot + bluff.
+## Tour de l'IA : Chen pré-flop, Monte-Carlo ensuite, cote du pot + bluff (selon le niveau).
 func ai_act() -> void:
 	if to_act != Actor.AI or result != "":
 		return
+	var prof: Dictionary = profile()
 	var to_call_amount: int = p_bet - a_bet
 	var p: float
 	if street == Street.PREFLOP:
 		var c: int = PokerAI.chen(ai_hole[0], ai_hole[1])
 		p = 0.33 + (c / 20.0) * 0.42
 	else:
-		p = PokerAI.win_prob(ai_hole, board, MC_ITERATIONS, rng)
+		p = PokerAI.win_prob(ai_hole, board, int(prof["iters"]), rng)
+	var noise: float = float(prof["noise"])
+	if noise > 0.0:
+		p = clampf(p + rng.randf_range(-noise, noise), 0.0, 1.0)
+	var value_p: float = float(prof["value_p"])
+	var bluff: float = float(prof["bluff"])
 
 	if to_call_amount <= 0:
 		var bet_size: int = maxi(roundi(pot * 0.5), BB)
-		if raises < 3 and p > 0.62 and rng.randf() < 0.85 and bet_size <= a_stack:
+		if raises < 3 and p > value_p and rng.randf() < 0.85 and bet_size <= a_stack:
 			bet_raise(Actor.AI, a_bet + bet_size)
 			return
-		if raises < 3 and p < 0.38 and rng.randf() < 0.13 and bet_size <= a_stack:
+		if raises < 3 and p < 0.38 and rng.randf() < bluff and bet_size <= a_stack:
 			bet_raise(Actor.AI, a_bet + bet_size)  # bluff occasionnel
 			return
 		check_call(Actor.AI)
@@ -362,10 +431,10 @@ func ai_act() -> void:
 	var pot_odds: float = float(to_call_amount) / float(pot + to_call_amount)
 	var half: int = roundi(pot * 0.6)
 	var raise_to: int = p_bet + maxi(half, BB)
-	if raises < 3 and p > 0.8 and rng.randf() < 0.75 and raise_to <= a_bet + a_stack:
+	if raises < 3 and p > value_p + 0.18 and rng.randf() < 0.75 and raise_to <= a_bet + a_stack:
 		bet_raise(Actor.AI, raise_to)
 		return
-	if p >= pot_odds + 0.02:
+	if p >= pot_odds + float(prof["margin"]):
 		check_call(Actor.AI)
 		return
 	if rng.randf() < 0.1 and p > pot_odds * 0.7:
