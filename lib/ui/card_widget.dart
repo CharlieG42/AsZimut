@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/cards.dart';
+import 'theme.dart';
 
 /// Rendu d'une carte à jouer (ou d'un dos bleu motif « Z »).
 class PlayingCardView extends StatelessWidget {
