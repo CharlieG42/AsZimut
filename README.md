@@ -142,8 +142,9 @@ Pour garder la même signature, ajouter ces secrets au dépôt
 | Secret | Contenu |
 |---|---|
 | `ANDROID_KEYSTORE_BASE64` | le fichier `.keystore` encodé en base64 (`base64 -w0 aszimut.keystore`) |
-| `ANDROID_KEYSTORE_ALIAS` | l'alias de la clé |
-| `ANDROID_KEYSTORE_PASSWORD` | le mot de passe (store et clé) |
+| `ANDROID_KEY_ALIAS` | l'alias de la clé |
+| `ANDROID_STORE_PASSWORD` | le mot de passe du keystore |
+| `ANDROID_KEY_PASSWORD` | le mot de passe de la clé (peut différer ; le workflow l'aligne) |
 
 ## Roadmap
 

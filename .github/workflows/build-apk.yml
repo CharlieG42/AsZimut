@@ -72,8 +72,9 @@ jobs:
       - name: Clé de signature (secrets si valides, sinon clé temporaire)
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KS_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_PASS: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -u
           KS_FILE="$RUNNER_TEMP/aszimut-release.keystore"
@@ -85,6 +86,17 @@ jobs:
             if echo "${KS_B64}" | base64 -d > "$KS_FILE" 2>/dev/null \
                && keytool -list -keystore "$KS_FILE" -storepass "${KS_PASS}" -alias "${KS_ALIAS}" > /dev/null 2>&1; then
               MODE="secrets"
+              # Godot utilise un seul mot de passe : on aligne celui de la clé sur celui du keystore.
+              if [ -n "${KEY_PASS}" ] && [ "${KEY_PASS}" != "${KS_PASS}" ]; then
+                if keytool -keypasswd -keystore "$KS_FILE" -storepass "${KS_PASS}" -alias "${KS_ALIAS}" \
+                     -keypass "${KEY_PASS}" -new "${KS_PASS}" > /dev/null 2>&1; then
+                  echo "Mot de passe de clé aligné sur celui du keystore (copie temporaire)."
+                else
+                  MODE="temporaire"
+                  REASON="mot de passe de clé (ANDROID_KEY_PASSWORD) incorrect"
+                  echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
+                fi
+              fi
             else
               REASON="secrets présents mais inutilisables (base64, alias ou mot de passe incorrect)"
               echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
