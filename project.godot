@@ -1,0 +1,37 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="AsZimut"
+config/description="Blackjack & Poker contre l'IA — WildZimut"
+run/main_scene="res://scenes/home.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/quit_on_go_back=false
+config/icon="res://icon.svg"
+
+[autoload]
+
+Bankroll="*res://scripts/bankroll_state.gd"
+
+[display]
+
+window/size/viewport_width=540
+window/size/viewport_height=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.016, 0.078, 0.047, 1)
