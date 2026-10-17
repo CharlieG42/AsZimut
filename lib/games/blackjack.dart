@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../app_state.dart';
 import '../core/cards.dart';
 
 enum BjPhase { bet, player, dealer, done }
@@ -27,7 +28,7 @@ int bjValue(List<PlayingCard> cards) {
 
 /// Moteur Blackjack : règles + croupier IA (tire jusqu'à 17).
 class BlackjackEngine extends ChangeNotifier {
-  final BankrollRef _bankroll;
+  final Bankroll _bankroll;
 
   List<PlayingCard> deck = shuffledDeck();
   List<PlayingCard> player = [];
@@ -158,11 +159,4 @@ class BlackjackEngine extends ChangeNotifier {
     phase = BjPhase.bet;
     notifyListeners();
   }
-}
-
-/// Alias pour éviter une dépendance circulaire avec app_state.dart.
-// ignore: one_member_abstracts
-abstract class BankrollRef {
-  int get value;
-  void add(int amount);
 }
