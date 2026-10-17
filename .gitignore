@@ -1,0 +1,46 @@
+# Divers
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter / Dart / Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symboles
+app.*.symbols
+
+# Règles obfusquées
+app.*.map.json
+
+# Android (généré par flutter create --platforms=android .)
+android/app/debug
+android/app/profile
+android/app/release
+key.properties
+*.jks
+*.keystore
