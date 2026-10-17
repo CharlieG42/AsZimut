@@ -68,6 +68,8 @@ func _run() -> void:
 	await _test_tutorial_and_options(stats)
 	await _test_help_and_advice(stats, bank)
 	await _test_bots_ui(stats)
+	await _test_dutch_ui(stats)
+	await _test_about()
 
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
@@ -458,11 +460,11 @@ func _test_tutorial_and_options(stats: StatsState) -> void:
 	_check(title.text == "Bienvenue sur AsZimut", "première page du tutoriel")
 	_check(_find_button(tuto, "Précédent") == null, "pas de « Précédent » sur la première page")
 	var seen: Array[String] = [title.text]
-	for _i: int in 4:
+	for _i: int in 5:
 		_check(_press(tuto, "Suivant"), "page suivante")
 		await _frames(2)
 		seen.append(title.text)
-	_check(seen.has("Blackjack") and seen.has("Poker"), "pages Blackjack et Poker")
+	_check(seen.has("Blackjack") and seen.has("Poker") and seen.has("Dutch"), "pages Blackjack, Poker et Dutch")
 	_check(seen.has("Classement des mains"), "page classement des mains")
 	_check(_find_button(tuto, "Commencer") != null, "dernière page : « Commencer »")
 	_check(_find_button(tuto, "Mode débutant (conseils pendant la partie)") == null, "libellé distinct sur la dernière page")
@@ -655,3 +657,164 @@ func _test_bots_ui(stats: StatsState) -> void:
 	LocalSession.bots = [false, false, false, false, false, false]
 	LocalSession.names = ["", "", "", "", "", ""]
 	stats.set_difficulty(1)
+
+
+func _drive_dutch(screen: Node, human_names: Array[String], budget: int) -> Dictionary:
+	var engine: DutchEngine = screen.get("engine") as DutchEngine
+	var out: Dictionary = {"covers": 0, "leaks": 0, "rounds": 0, "human_turns": 0}
+	while budget > 0 and engine.phase != DutchEngine.Phase.MATCH_OVER:
+		budget -= 1
+		await _frames(1)
+		var cover: Control = screen.get("_cover") as Control
+		if engine.phase == DutchEngine.Phase.ROUND_OVER:
+			out["rounds"] += 1
+			_press(screen, "Manche suivante")
+			continue
+		if cover.visible:
+			out["covers"] += 1
+			if _count_face_up(screen.get("_body")) > 2:
+				out["leaks"] += 1
+			var who: String = engine.names[engine.current]
+			if not _press(screen, "Je suis %s" % who):
+				out["leaks"] += 1
+			continue
+		if engine.current_is_bot():
+			continue
+		if not human_names.has(engine.names[engine.current]):
+			continue
+		out["human_turns"] += 1
+		match engine.phase:
+			DutchEngine.Phase.TURN:
+				if engine.can_call_dutch() and engine.hand_total(engine.current) <= 10 and randf() < 0.5:
+					_press(screen, "Annoncer DUTCH")
+				elif randf() < 0.5:
+					_press(screen, "Piocher")
+				else:
+					var b: Button = _find_button_prefix(screen, "Prendre la défausse")
+					if b != null:
+						b.pressed.emit()
+			DutchEngine.Phase.HELD:
+				if not engine.held_from_discard and randf() < 0.5:
+					_press(screen, "Défausser cette carte")
+				else:
+					var c: CardButton = _find_card_button(screen)
+					if c != null:
+						c.pressed.emit()
+					else:
+						out["leaks"] += 1
+			DutchEngine.Phase.POWER:
+				var c2: CardButton = _find_card_button(screen)
+				if c2 != null and randf() < 0.8:
+					c2.pressed.emit()
+					await _frames(1)
+					if engine.phase == DutchEngine.Phase.POWER and engine.power == DutchEngine.Power.SWAP_BLIND:
+						var c3: CardButton = _find_card_button(screen)
+						if c3 != null:
+							c3.pressed.emit()
+				else:
+					_press(screen, "Renoncer au pouvoir")
+			DutchEngine.Phase.KING_DECIDE:
+				_press(screen, "Garder, ne pas échanger")
+	return out
+
+
+func _find_card_button(node: Node) -> CardButton:
+	if node is CardButton and (node as CardButton).is_visible_in_tree() and (node as CardButton).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		return node as CardButton
+	for child: Node in node.get_children():
+		var found: CardButton = _find_card_button(child)
+		if found != null:
+			return found
+	return null
+
+
+func _test_dutch_ui(stats: StatsState) -> void:
+	StatsState.tutorial_checked = true
+	stats.beginner = true
+	# Solo contre ZIA
+	LocalSession.start_solo_dutch()
+	LocalSession.dutch_target = 30
+	var screen: Node = _mount("res://scenes/dutch.tscn")
+	await _frames(3)
+	var engine: DutchEngine = screen.get("engine") as DutchEngine
+	_check(engine != null and engine.n == 2 and engine.names[1] == "ZIA" and engine.bots[1], "dutch solo : moteur vs ZIA")
+	engine.rng.seed = 4242
+	screen.get("_bot_timer").wait_time = 0.02
+	await _frames(2)
+	_check(not (screen.get("_cover") as Control).visible, "dutch solo : pas d'écran de passage")
+	var names: Array[String] = ["Vous"]
+	var info: Dictionary = await _drive_dutch(screen, names, 6000)
+	_check(engine.phase == DutchEngine.Phase.MATCH_OVER, "dutch solo : partie terminée (%d manches)" % int(info["rounds"] + 1))
+	_check(int(info["leaks"]) == 0, "dutch solo : aucune anomalie d'interface (%d)" % int(info["leaks"]))
+	_check(_find_button(screen, "Voir le classement") != null, "dutch solo : bouton classement")
+	_check(_press(screen, "Voir le classement"), "dutch solo : classement")
+	await _frames(3)
+	_unmount(screen)
+	_check(LocalSession.results.size() == 2 and str(LocalSession.results[0].get("unit", "")) == "pts", "dutch : résultats en points")
+	var res: Node = _mount("res://scenes/results.tscn")
+	await _frames(2)
+	_unmount(res)
+
+	# 3 joueurs : deux humains et ZIA, avec passage d'appareil
+	LocalSession.solo = false
+	LocalSession.game = LocalSession.Game.DUTCH
+	LocalSession.count = 3
+	LocalSession.dutch_target = 30
+	LocalSession.names = ["Ana", "Ben", "", "", "", ""]
+	LocalSession.bots = [false, false, true, false, false, false]
+	var multi: Node = _mount("res://scenes/dutch.tscn")
+	await _frames(3)
+	var e2: DutchEngine = multi.get("engine") as DutchEngine
+	_check(e2.n == 3 and e2.names[0] == "Ana" and e2.names[2] == "ZIA", "dutch multi : joueurs créés")
+	e2.rng.seed = 99
+	multi.get("_bot_timer").wait_time = 0.02
+	var names2: Array[String] = ["Ana", "Ben"]
+	var info2: Dictionary = await _drive_dutch(multi, names2, 9000)
+	_check(e2.phase == DutchEngine.Phase.MATCH_OVER, "dutch multi : partie terminée")
+	_check(int(info2["covers"]) > 0, "dutch multi : écran de passage affiché (%d)" % int(info2["covers"]))
+	_check(int(info2["leaks"]) == 0, "dutch multi : cartes cachées sous l'écran de passage (%d)" % int(info2["leaks"]))
+	_unmount(multi)
+
+	# Aide Dutch
+	var help_host: Node = _mount("res://scenes/dutch.tscn")
+	LocalSession.solo = true
+	await _frames(2)
+	_press(help_host, "?")
+	await _frames(2)
+	_check(HelpOverlay.is_open(help_host as Control), "dutch : aide ouverte")
+	HelpOverlay.close_in(help_host as Control)
+	_unmount(help_host)
+	LocalSession.solo = false
+
+	# Sélection Dutch dans la préparation de partie
+	LocalSession.game = LocalSession.Game.POKER
+	LocalSession.count = 2
+	var setup: Node = _mount("res://scenes/setup.tscn")
+	await _frames(2)
+	_check(_press(setup, "Dutch"), "setup : choix Dutch")
+	await _frames(1)
+	_check(LocalSession.game == LocalSession.Game.DUTCH and LocalSession.max_players(LocalSession.Game.DUTCH) == 5, "setup : Dutch jusqu'à 5")
+	_check(_find_button(setup, "100 pts") != null, "setup : score cible proposé")
+	_unmount(setup)
+
+
+func _test_about() -> void:
+	var home: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	var btn: Button = _find_button_prefix(home, "À propos")
+	_check(btn != null, "accueil : bouton À propos")
+	_check(AppInfo.version().split(".").size() == 5, "version à 5 composantes (%s)" % AppInfo.version())
+	_unmount(home)
+	var about: Node = _mount("res://scenes/about.tscn")
+	await _frames(2)
+	_check(_find_label_text(about, AppInfo.version()), "À propos : version affichée")
+	_unmount(about)
+
+
+func _find_label_text(node: Node, text: String) -> bool:
+	if node is Label and (node as Label).text == text:
+		return true
+	for child: Node in node.get_children():
+		if _find_label_text(child, text):
+			return true
+	return false

@@ -120,9 +120,7 @@ func _rebuild() -> void:
 	reset.pressed.connect(_on_reset)
 	_content.add_child(reset)
 
-	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
-	if version != "":
-		_content.add_child(UIKit.label("AsZimut v%s" % version, 12, UIKit.TEXT_SOFT))
+	_content.add_child(UIKit.label("AsZimut v%s" % AppInfo.version(), 12, UIKit.TEXT_SOFT))
 
 
 func _section(title: String) -> VBoxContainer:

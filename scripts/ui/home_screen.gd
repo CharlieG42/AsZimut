@@ -4,6 +4,7 @@ extends Control
 const BLACKJACK_SCENE: String = "res://scenes/blackjack.tscn"
 const POKER_SCENE: String = "res://scenes/poker.tscn"
 const STATS_SCENE: String = "res://scenes/stats.tscn"
+const ABOUT_SCENE: String = "res://scenes/about.tscn"
 const POKER_MIN_BANK: int = 20
 
 var _bank: CoinLabel
@@ -28,17 +29,17 @@ func _ready() -> void:
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 24)
+		margin.add_theme_constant_override(side, 20)
 	add_child(margin)
 
 	var col: VBoxContainer = VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
+	col.add_theme_constant_override("separation", 10)
 	margin.add_child(col)
 
-	col.add_child(UIKit.spacer(24))
+	col.add_child(UIKit.spacer(0))
 
 	_logo = Control.new()
-	_logo.custom_minimum_size = Vector2(0, 150)
+	_logo.custom_minimum_size = Vector2(0, 112)
 	_logo.resized.connect(_layout_logo)
 	col.add_child(_logo)
 	var logo_specs: Array[Array] = [
@@ -46,13 +47,13 @@ func _ready() -> void:
 		[14, Cards.Suit.HEARTS],
 	]
 	for spec: Array in logo_specs:
-		var view: CardView = CardView.new(1.4)
+		var view: CardView = CardView.new(1.1)
 		_logo.add_child(view)
 		view.show_card(Cards.make(int(spec[0]), int(spec[1])), false)
 		_logo_cards.append(view)
 
 	col.add_child(UIKit.label("AsZimut", 46, UIKit.GOLD, true))
-	col.add_child(UIKit.label("Blackjack & Poker contre l'IA — WildZimut", 14, UIKit.TEXT_SOFT))
+	col.add_child(UIKit.label("Blackjack, Poker & Dutch — WildZimut", 14, UIKit.TEXT_SOFT))
 	col.add_child(UIKit.spacer(4))
 
 	var bank_row: HBoxContainer = HBoxContainer.new()
@@ -72,7 +73,7 @@ func _ready() -> void:
 	_reload_button.pressed.connect(func() -> void: Bankroll.reset())
 	col.add_child(_reload_button)
 
-	col.add_child(UIKit.spacer(10))
+	col.add_child(UIKit.spacer(0))
 
 	var bj_icons: Array[int] = [Cards.make(14, Cards.Suit.SPADES), Cards.make(13, Cards.Suit.HEARTS)]
 	var blackjack_card: GameCard = GameCard.new(
@@ -96,6 +97,14 @@ func _ready() -> void:
 	_poker_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_poker_hint)
 
+	var dutch_card: GameCard = GameCard.new(
+		"Dutch",
+		"Jeu de mémoire : le moins de points gagne. Seul contre ZIA.",
+		[Cards.make(13, Cards.Suit.HEARTS), Cards.make(7, Cards.Suit.CLUBS)] as Array[int]
+	)
+	dutch_card.pressed.connect(_start_solo_dutch)
+	col.add_child(dutch_card)
+
 	var local_btn: Button = UIKit.outline_button("Multijoueur local · 2 à 6 joueurs", UIKit.GOLD, 16)
 	local_btn.pressed.connect(_open.bind(LocalSession.SETUP_SCENE))
 	col.add_child(local_btn)
@@ -107,19 +116,25 @@ func _ready() -> void:
 	var stats_btn: Button = UIKit.outline_button("Options & statistiques", UIKit.TEXT_SOFT, 16)
 	stats_btn.pressed.connect(_open.bind(STATS_SCENE))
 	col.add_child(stats_btn)
-	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
-	col.add_child(UIKit.label("v%s" % version, 11, UIKit.TEXT_SOFT))
+	var about_btn: Button = UIKit.outline_button("À propos · v%s" % AppInfo.version(), UIKit.TEXT_SOFT, 13)
+	about_btn.pressed.connect(_open.bind(ABOUT_SCENE))
+	col.add_child(about_btn)
 
 	Bankroll.changed.connect(_refresh)
 	_refresh()
 	UIKit.fade_in(self)
 
 
+func _start_solo_dutch() -> void:
+	LocalSession.start_solo_dutch()
+	_open(LocalSession.scene(LocalSession.Game.DUTCH))
+
+
 func _layout_logo() -> void:
 	if _logo_cards.size() < 2:
 		return
 	var cx: float = _logo.size.x / 2.0
-	var card_size: Vector2 = CardView.BASE_SIZE * 1.4
+	var card_size: Vector2 = CardView.BASE_SIZE * 1.1
 	_logo_cards[0].position = Vector2(cx - card_size.x * 0.95, 14)
 	_logo_cards[0].rotation = -0.17
 	_logo_cards[1].position = Vector2(cx - card_size.x * 0.05, 14)

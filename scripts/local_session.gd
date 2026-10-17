@@ -2,14 +2,18 @@ class_name LocalSession
 extends RefCounted
 ## Paramètres de la partie multijoueur locale en cours (partagés entre les écrans).
 
-enum Game { BLACKJACK, POKER }
+enum Game { BLACKJACK, POKER, DUTCH }
 
 const HOME_SCENE: String = "res://scenes/home.tscn"
 const SETUP_SCENE: String = "res://scenes/setup.tscn"
 const RESULTS_SCENE: String = "res://scenes/results.tscn"
 const CHIP_CHOICES: Array[int] = [500, 1000, 2000]
+const DUTCH_TARGETS: Array[int] = [30, 50, 100]
 
 static var game: int = Game.POKER
+## Dutch : score qui met fin à la partie, et mode « 1 joueur contre ZIA » lancé depuis l'accueil.
+static var dutch_target: int = 50
+static var solo: bool = false
 static var count: int = 2
 static var chips: int = 1000
 static var names: Array[String] = ["", "", "", "", "", ""]
@@ -24,16 +28,24 @@ static func min_players(_g: int) -> int:
 
 
 static func max_players(g: int) -> int:
-	return MultiBlackjackEngine.MAX_PLAYERS if g == Game.BLACKJACK else PokerTableEngine.MAX_PLAYERS
+	if g == Game.BLACKJACK:
+		return MultiBlackjackEngine.MAX_PLAYERS
+	if g == Game.DUTCH:
+		return DutchEngine.MAX_PLAYERS
+	return PokerTableEngine.MAX_PLAYERS
 
 
 static func title(g: int) -> String:
+	if g == Game.DUTCH:
+		return "Dutch"
 	return "Blackjack" if g == Game.BLACKJACK else "Poker Hold'em"
 
 
 static func scene(g: int) -> String:
 	if g == Game.BLACKJACK:
 		return "res://scenes/multi_blackjack.tscn"
+	if g == Game.DUTCH:
+		return "res://scenes/dutch.tscn"
 	return "res://scenes/multi_poker.tscn"
 
 
@@ -84,3 +96,10 @@ static func human_count() -> int:
 
 static func store_results(rows: Array[Dictionary]) -> void:
 	results = rows
+
+
+## Dutch en solo : un humain contre ZIA.
+static func start_solo_dutch() -> void:
+	game = Game.DUTCH
+	count = 2
+	solo = true

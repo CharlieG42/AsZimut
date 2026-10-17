@@ -5,6 +5,7 @@ var _content: VBoxContainer
 
 
 func _ready() -> void:
+	LocalSession.solo = false
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -51,17 +52,14 @@ func _rebuild() -> void:
 
 	# Jeu
 	var game_box: VBoxContainer = _section("Jeu")
-	var games: Array[String] = ["Blackjack", "Poker"]
+	var games: Array[String] = ["Blackjack", "Poker", "Dutch"]
 	game_box.add_child(_segment(games, LocalSession.game, _on_game))
-	var desc: Label = UIKit.label(
-		(
-			"Chacun joue contre le croupier avec sa propre pile."
-			if LocalSession.game == LocalSession.Game.BLACKJACK
-			else "Texas Hold'em entre joueurs, avec pots annexes. Blinds croissantes."
-		),
-		12,
-		UIKit.TEXT_SOFT
-	)
+	var desc_text: String = "Texas Hold'em entre joueurs, avec pots annexes. Blinds croissantes."
+	if LocalSession.game == LocalSession.Game.BLACKJACK:
+		desc_text = "Chacun joue contre le croupier avec sa propre pile."
+	elif LocalSession.game == LocalSession.Game.DUTCH:
+		desc_text = "Jeu de mémoire : le moins de points gagne. Annoncez DUTCH au bon moment !"
+	var desc: Label = UIKit.label(desc_text, 12, UIKit.TEXT_SOFT)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	game_box.add_child(desc)
 
@@ -96,20 +94,36 @@ func _rebuild() -> void:
 	bots_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	players_box.add_child(bots_note)
 
-	# Jetons
-	var chips_box: VBoxContainer = _section("Jetons de départ par joueur")
-	var labels: Array[String] = []
-	var selected: int = 0
-	for k: int in LocalSession.CHIP_CHOICES.size():
-		labels.append(str(LocalSession.CHIP_CHOICES[k]))
-		if LocalSession.CHIP_CHOICES[k] == LocalSession.chips:
-			selected = k
-	chips_box.add_child(_segment(labels, selected, _on_chips))
-	var note: Label = UIKit.label(
-		"Cette partie est indépendante de votre banque et de vos statistiques.", 12, UIKit.TEXT_SOFT
-	)
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chips_box.add_child(note)
+	# Jetons (blackjack, poker) ou score cible (Dutch)
+	if LocalSession.game == LocalSession.Game.DUTCH:
+		var target_box: VBoxContainer = _section("Score qui termine la partie")
+		var tlabels: Array[String] = []
+		var tsel: int = 1
+		for k: int in LocalSession.DUTCH_TARGETS.size():
+			tlabels.append("%d pts" % LocalSession.DUTCH_TARGETS[k])
+			if LocalSession.DUTCH_TARGETS[k] == LocalSession.dutch_target:
+				tsel = k
+		target_box.add_child(_segment(tlabels, tsel, _on_target))
+		var tnote: Label = UIKit.label(
+			"Dès qu'un joueur atteint ce total, la partie s'arrête : le plus bas gagne.", 12, UIKit.TEXT_SOFT
+		)
+		tnote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		target_box.add_child(tnote)
+	else:
+		var chips_box: VBoxContainer = _section("Jetons de départ par joueur")
+		var labels: Array[String] = []
+		var selected: int = 0
+		for k: int in LocalSession.CHIP_CHOICES.size():
+			labels.append(str(LocalSession.CHIP_CHOICES[k]))
+			if LocalSession.CHIP_CHOICES[k] == LocalSession.chips:
+				selected = k
+		chips_box.add_child(_segment(labels, selected, _on_chips))
+		var note: Label = UIKit.label(
+			"Cette partie est indépendante de votre banque et de vos statistiques.", 12, UIKit.TEXT_SOFT
+		)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		chips_box.add_child(note)
+
 
 	_content.add_child(UIKit.spacer(4))
 	var start: Button = UIKit.button("Lancer la partie", UIKit.GOLD, UIKit.INK, 20)
@@ -180,6 +194,11 @@ func _on_count(delta: int) -> void:
 
 func _on_chips(index: int) -> void:
 	LocalSession.chips = LocalSession.CHIP_CHOICES[index]
+	_rebuild()
+
+
+func _on_target(index: int) -> void:
+	LocalSession.dutch_target = LocalSession.DUTCH_TARGETS[index]
 	_rebuild()
 
 

@@ -2,7 +2,7 @@ class_name HelpContent
 extends RefCounted
 ## Textes d'aide (règles, conseils) partagés par le tutoriel et le bouton « ? ».
 
-enum Topic { BLACKJACK, POKER }
+enum Topic { BLACKJACK, POKER, DUTCH }
 
 ## Exemples de mains pour le classement : [nom, description, cartes [rang, couleur]].
 const HANDS: Array[Array] = [
@@ -20,12 +20,16 @@ const HANDS: Array[Array] = [
 
 
 static func title(topic: int) -> String:
+	if topic == Topic.DUTCH:
+		return "Dutch"
 	return "Blackjack" if topic == Topic.BLACKJACK else "Poker Hold'em"
 
 
 static func sections(topic: int) -> Array[Dictionary]:
 	if topic == Topic.BLACKJACK:
 		return blackjack_sections()
+	if topic == Topic.DUTCH:
+		return dutch_sections()
 	return poker_sections()
 
 
@@ -79,12 +83,47 @@ static func poker_sections() -> Array[Dictionary]:
 	]
 
 
+static func dutch_sections() -> Array[Dictionary]:
+	return [
+		{
+			"title": "But du jeu",
+			"text":
+			"Avoir le moins de points possible. Chaque joueur a 4 cartes face cachées et ne connaît que 2 d'entre elles au départ (pastille dorée = carte que vous connaissez). La partie s'arrête quand un joueur atteint le score cible : le plus bas gagne.",
+		},
+		{
+			"title": "Valeur des cartes",
+			"text":
+			"As = 1 · 2 à 10 = leur numéro · Valet = 11 · Dame = 12\nRoi noir = 13 · Roi rouge = 0 (la meilleure carte).",
+		},
+		{
+			"title": "Votre tour",
+			"text":
+			"1. Piochez, ou prenez la carte visible de la défausse.\n2. Échangez-la avec l'une de vos 4 cartes (l'ancienne part à la défausse)…\n3. …ou, si vous avez pioché, défaussez-la.\nOu bien annoncez DUTCH au lieu de jouer (à partir de votre 2e tour).",
+		},
+		{
+			"title": "Pouvoirs (carte piochée puis défaussée)",
+			"text":
+			"7 ou 8 : regardez une de vos cartes.\n9 ou 10 : regardez une carte d'un adversaire.\nValet ou Dame : échangez, sans regarder, une de vos cartes avec une carte adverse.\nRoi noir : regardez une carte, puis échangez-la ou non.\nUne carte prise dans la défausse n'a pas de pouvoir.",
+		},
+		{
+			"title": "Annoncer DUTCH",
+			"text":
+			"Quand vous pensez avoir la main la plus faible, annoncez DUTCH : chacun joue un dernier tour, puis toutes les cartes sont révélées. Si vous avez strictement le plus petit total, vous marquez 0 ; sinon vous marquez votre total + 10. Les autres marquent leur total (0 pour le meilleur).",
+		},
+		{
+			"title": "Astuces",
+			"text":
+			"Retenez bien vos cartes connues. Remplacez d'abord vos plus hautes cartes, et testez les inconnues avec une carte basse. Ne criez DUTCH que si vous êtes presque sûr de votre coup : ZIA le fait seulement quand sa main est très basse.",
+		},
+	]
+
+
 static func app_sections() -> Array[Dictionary]:
 	return [
 		{
 			"title": "Multijoueur local",
 			"text":
-			"Jouez à 2 à 6 sur un seul appareil, hors ligne. Au poker, un écran « Passez l'appareil » cache les cartes entre deux tours. Chaque siège peut aussi être confié à l'IA (ZIA).",
+			"Jouez à 2 à 6 sur un seul appareil, hors ligne (Dutch : 2 à 5). Au poker et au Dutch, un écran « Passez l'appareil » cache les cartes entre deux tours. Chaque siège peut aussi être confié à l'IA (ZIA).",
 		},
 		{
 			"title": "Aide et conseils",
@@ -98,9 +137,9 @@ static func app_sections() -> Array[Dictionary]:
 static func tutorial_pages() -> Array[Dictionary]:
 	var welcome: Array[Dictionary] = [
 		{
-			"title": "Deux jeux, une banque",
+			"title": "Trois jeux",
 			"text":
-			"Blackjack contre le croupier et Poker Hold'em contre ZIA, notre IA. Votre banque de jetons est commune aux deux jeux et se sauvegarde sur l'appareil.",
+			"Blackjack contre le croupier, Poker Hold'em contre ZIA, notre IA, et Dutch, un jeu de mémoire sans mise. Votre banque de jetons est commune au blackjack et au poker ; elle se sauvegarde sur l'appareil.",
 		},
 		{
 			"title": "Ce tutoriel",
@@ -112,6 +151,7 @@ static func tutorial_pages() -> Array[Dictionary]:
 	pages.append({"title": "Bienvenue sur AsZimut", "sections": welcome, "hands": false, "beginner": false})
 	pages.append({"title": "Blackjack", "sections": blackjack_sections(), "hands": false, "beginner": false})
 	pages.append({"title": "Poker", "sections": poker_sections(), "hands": false, "beginner": false})
+	pages.append({"title": "Dutch", "sections": dutch_sections(), "hands": false, "beginner": false})
 	pages.append({"title": "Classement des mains", "sections": [], "hands": true, "beginner": false})
 	pages.append({"title": "Jouer à plusieurs, se faire aider", "sections": app_sections(), "hands": false, "beginner": true})
 	return pages

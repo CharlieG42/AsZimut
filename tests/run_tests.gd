@@ -25,6 +25,7 @@ func _initialize() -> void:
 	_test_blackjack_advisor()
 	_test_poker_advisor()
 	_test_bots()
+	_test_dutch()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -781,3 +782,156 @@ func _test_bots() -> void:
 			b.next_round()
 	_check(anomalies == 0, "bots blackjack : manches cohérentes (%d)" % anomalies)
 	_check(r.randf() >= 0.0, "fin des tests bots")
+
+
+func _dutch(n: int, seed_value: int = 1) -> DutchEngine:
+	var names: Array[String] = []
+	var flags: Array[bool] = []
+	for i: int in n:
+		names.append("J%d" % i)
+		flags.append(false)
+	var e: DutchEngine = DutchEngine.new()
+	e.setup(names, flags, 1, seed_value)
+	return e
+
+
+func _test_dutch() -> void:
+	# Valeurs et pouvoirs
+	_check(DutchEngine.card_points(Cards.make(14, 0)) == 1, "dutch : As = 1")
+	_check(DutchEngine.card_points(Cards.make(13, Cards.Suit.HEARTS)) == 0, "dutch : roi rouge = 0")
+	_check(DutchEngine.card_points(Cards.make(13, Cards.Suit.SPADES)) == 13, "dutch : roi noir = 13")
+	_check(DutchEngine.card_points(Cards.make(12, 0)) == 12, "dutch : dame = 12")
+	_check(DutchEngine.power_of(Cards.make(7, 0)) == DutchEngine.Power.PEEK_OWN, "dutch : 7 regarde")
+	_check(DutchEngine.power_of(Cards.make(10, 0)) == DutchEngine.Power.PEEK_OTHER, "dutch : 10 espionne")
+	_check(DutchEngine.power_of(Cards.make(11, 0)) == DutchEngine.Power.SWAP_BLIND, "dutch : valet échange")
+	_check(DutchEngine.power_of(Cards.make(13, 0)) == DutchEngine.Power.KING, "dutch : roi noir")
+	_check(DutchEngine.power_of(Cards.make(13, Cards.Suit.DIAMONDS)) == DutchEngine.Power.NONE, "dutch : roi rouge sans pouvoir")
+
+	# Distribution
+	var e: DutchEngine = _dutch(3)
+	_check(e.hands.size() == 3 and e.hands[0].size() == 4, "dutch : 4 cartes par joueur")
+	_check(e.draw_pile.size() == 52 - 12 - 1 and e.discard_pile.size() == 1, "dutch : pioche et défausse")
+	_check(e.knows(0, 0, 2) and e.knows(0, 0, 3) and not e.knows(0, 0, 0), "dutch : 2 cartes connues au départ")
+	_check(not e.knows(0, 1, 2), "dutch : les cartes des autres restent secrètes")
+	_check(not e.can_call_dutch(), "dutch : pas d'annonce au 1er tour")
+
+	# Échange depuis la pioche : la carte tirée reste secrète
+	var first: int = e.current
+	var old: int = e.hands[first][0]
+	_check(e.draw_from_deck() and e.phase == DutchEngine.Phase.HELD, "dutch : pioche")
+	var drawn: int = e.held
+	_check(e.swap_held(0), "dutch : échange")
+	_check(e.hands[first][0] == drawn and e.top_discard() == old, "dutch : carte échangée et défaussée")
+	_check(e.knows(first, first, 0) and not e.knows((first + 1) % 3, first, 0), "dutch : seul l'acteur connaît la carte piochée")
+	_check(e.current == (first + 1) % 3, "dutch : tour suivant")
+
+	# Prise de la défausse : visible par tous, et pas de défausse directe
+	var p2: int = e.current
+	var top: int = e.top_discard()
+	_check(e.take_discard() and not e.discard_held(), "dutch : défausse reprise, pas de défausse directe")
+	e.swap_held(1)
+	_check(e.knows((p2 + 1) % 3, p2, 1) and e.known_card((p2 + 1) % 3, p2, 1) == top, "dutch : carte prise dans la défausse connue de tous")
+
+	# Pouvoirs sur mains rigées
+	var r: DutchEngine = _dutch(2)
+	r.current = 0
+	r.phase = DutchEngine.Phase.TURN
+	r.hands[0] = [Cards.make(5, 0), Cards.make(9, 0), Cards.make(3, 0), Cards.make(4, 0)]
+	r.hands[1] = [Cards.make(2, 1), Cards.make(6, 1), Cards.make(8, 1), Cards.make(10, 1)]
+	r.draw_pile.append(Cards.make(11, 2))  # valet : échange à l'aveugle
+	r.draw_from_deck()
+	_check(r.discard_held() and r.phase == DutchEngine.Phase.POWER and r.power == DutchEngine.Power.SWAP_BLIND, "dutch : valet déclenche l'échange")
+	_check(not r.use_swap_blind(1, 0, 0), "dutch : pas d'échange avec soi-même")
+	r.known[0][DutchEngine.key(0, 1)] = r.hands[0][1]
+	_check(r.use_swap_blind(1, 1, 3), "dutch : échange aveugle")
+	_check(r.hands[0][1] == Cards.make(10, 1) and r.hands[1][3] == Cards.make(9, 0), "dutch : cartes échangées")
+	_check(r.known_card(0, 1, 3) == Cards.make(9, 0), "dutch : la connaissance suit la carte échangée")
+	_check(not r.knows(0, 0, 1), "dutch : la nouvelle carte est inconnue")
+	_check(r.current == 1, "dutch : tour passé après le pouvoir")
+
+	# Roi noir : regarder puis échanger
+	r.draw_pile.append(Cards.make(13, 0))
+	r.draw_from_deck()
+	r.discard_held()
+	_check(r.power == DutchEngine.Power.KING, "dutch : roi noir")
+	_check(r.use_king_look(0, 2) and r.phase == DutchEngine.Phase.KING_DECIDE, "dutch : regard du roi")
+	_check(r.known_card(1, 0, 2) == r.hands[0][2], "dutch : le roi révèle la carte à son acteur")
+	var seen: int = r.hands[0][2]
+	_check(r.king_swap(0) and r.hands[1][0] == seen, "dutch : échange du roi")
+
+	# Annonce Dutch et scoring
+	var d: DutchEngine = _dutch(3, 5)
+	d.turns_taken = [1, 1, 1]
+	d.current = 0
+	d.phase = DutchEngine.Phase.TURN
+	d.hands[0] = [Cards.make(14, 0), Cards.make(2, 0), Cards.make(3, 0), Cards.make(14, 1)]  # 1+2+3+1 = 7
+	d.hands[1] = [Cards.make(10, 0), Cards.make(9, 1), Cards.make(8, 0), Cards.make(7, 0)]
+	d.hands[2] = [Cards.make(5, 0), Cards.make(5, 1), Cards.make(6, 2), Cards.make(4, 3)]
+	_check(d.call_dutch() and d.dutch_caller == 0, "dutch : annonce")
+	_check(not d.can_call_dutch(), "dutch : une seule annonce")
+	for _i: int in 2:
+		d.draw_from_deck()
+		d.swap_held(0)
+	_check(d.round_is_over(), "dutch : manche finie après le dernier tour")
+	_check(d.round_points[0] == 0 or d.caller_failed, "dutch : points du preneur cohérents")
+
+	# Preneur battu : pénalité
+	var f: DutchEngine = _dutch(2, 6)
+	f.turns_taken = [1, 1]
+	f.current = 0
+	f.phase = DutchEngine.Phase.TURN
+	f.hands[0] = [Cards.make(10, 0), Cards.make(10, 1), Cards.make(9, 0), Cards.make(9, 1)]
+	f.hands[1] = [Cards.make(2, 0), Cards.make(2, 1), Cards.make(3, 0), Cards.make(3, 1)]
+	f.call_dutch()
+	f.hands[1] = [Cards.make(2, 0), Cards.make(2, 1), Cards.make(3, 0), Cards.make(3, 1)]
+	f.draw_pile.append(Cards.make(14, 2))
+	f.draw_from_deck()
+	f.swap_held(0)
+	_check(f.caller_failed and f.totals[0] == 38 + DutchEngine.DUTCH_PENALTY, "dutch : pénalité du preneur battu")
+	_check(f.round_winners == [1] and f.totals[1] == 0, "dutch : le plus bas marque 0")
+
+	# Fin de partie et classement
+	var m: DutchEngine = _dutch(2, 7)
+	m.target = 20
+	m.turns_taken = [1, 1]
+	m.current = 0
+	m.phase = DutchEngine.Phase.TURN
+	m.hands[0] = [Cards.make(10, 0), Cards.make(10, 1), Cards.make(9, 0), Cards.make(9, 1)]
+	m.hands[1] = [Cards.make(2, 0), Cards.make(2, 1), Cards.make(3, 0), Cards.make(3, 1)]
+	m.call_dutch()
+	m.draw_from_deck()
+	m.discard_held()
+	if m.phase == DutchEngine.Phase.POWER:
+		m.skip_power()
+	if m.phase == DutchEngine.Phase.KING_DECIDE:
+		m.keep_king()
+	_check(m.phase == DutchEngine.Phase.MATCH_OVER, "dutch : fin de partie au score cible")
+	_check(str(m.ranking()[0]["name"]) == "J1", "dutch : classement, le plus bas gagne")
+
+	# Simulations 100 % ZIA : toujours terminées, 52 cartes conservées
+	var anomalies: int = 0
+	for game: int in 24:
+		var count: int = 2 + game % 4
+		var names: Array[String] = []
+		var flags: Array[bool] = []
+		for i: int in count:
+			names.append("Z%d" % i)
+			flags.append(true)
+		var b: DutchEngine = DutchEngine.new()
+		b.setup(names, flags, game % 3, 900 + game)
+		var steps: int = 0
+		while b.phase != DutchEngine.Phase.MATCH_OVER and steps < 20000:
+			steps += 1
+			if b.phase == DutchEngine.Phase.ROUND_OVER:
+				b.start_round()
+				continue
+			b.bot_step()
+			var total: int = b.draw_pile.size() + b.discard_pile.size() + (1 if b.held >= 0 else 0)
+			for h: Array in b.hands:
+				total += h.size()
+			if total != 52:
+				anomalies += 1
+				break
+		if steps >= 20000:
+			anomalies += 1
+	_check(anomalies == 0, "dutch : parties 100 %% ZIA terminées et cohérentes (%d)" % anomalies)

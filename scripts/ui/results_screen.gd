@@ -66,6 +66,11 @@ func _row(index: int, data: Dictionary) -> Control:
 	row.add_child(name_label)
 
 	var right: VBoxContainer = VBoxContainer.new()
+	if str(data.get("unit", "")) == "pts":
+		var pts: Label = UIKit.label("%d pts" % int(data["stack"]), 19, UIKit.GOLD, true)
+		right.add_child(pts)
+		row.add_child(right)
+		return panel
 	var coins: CoinLabel = CoinLabel.new(17, UIKit.GOLD)
 	coins.set_amount(int(data["stack"]))
 	right.add_child(coins)

@@ -23,18 +23,27 @@
 - Indication de votre meilleure main en cours (« Paire de Rois »…).
 - Quitter en pleine main revient à se coucher.
 
+### Dutch (variante « Cabo », 2 à 5 joueurs)
+Jeu de mémoire sans mise : **le moins de points gagne**. Disponible **seul contre ZIA** (tuile de l'accueil) ou **à plusieurs sur le même appareil** (Multijoueur local → Dutch, avec sièges IA possibles).
+- 4 cartes face cachées par joueur, 2 connues au départ (pastille dorée = carte mémorisée, affichée face visible pour son propriétaire).
+- Un tour : piocher ou prendre la défausse, puis échanger avec une de ses cartes (ou défausser la carte piochée).
+- Valeurs : As 1, 2 à 10 = numéro, Valet 11, Dame 12, Roi noir 13, **Roi rouge 0**.
+- Pouvoirs d'une carte piochée puis défaussée : 7/8 regarder une des siennes, 9/10 regarder un adversaire, Valet/Dame échange à l'aveugle, Roi noir regarder puis échanger.
+- **DUTCH** : à partir de son 2e tour, on peut l'annoncer ; les autres jouent un dernier tour. Preneur seul au plus bas : 0 ; sinon total + 10. La partie s'arrête au score cible (30, 50 ou 100).
+- ZIA retient les cartes vues (avec des oublis aux niveaux faibles) et n'annonce Dutch que sur une main estimée très basse. Règles retenues : pas de « tape » (jouer en simultané n'a pas de sens sur un seul appareil).
+
 ### Multijoueur local (même appareil, hors ligne)
 Bouton « Multijoueur local » de l'accueil : on choisit le jeu, le nombre de joueurs, leurs noms et les jetons de départ.
 La partie est indépendante de la banque et des statistiques solo.
 - **Blackjack, 2 à 5 joueurs** contre le croupier : chacun a sa pile, mise puis joue à son tour (carte, rester, doubler).
 - **Poker Hold'em, 2 à 6 joueurs** : tapis, pots annexes, relance au curseur, blinds qui augmentent toutes les 8 mains,
   éliminations et classement final.
-- **Écran « passez l'appareil »** avant chaque tour de poker : les cartes ne sont visibles que pour le joueur dont c'est le tour.
+- **Écran « passez l'appareil »** avant chaque tour de poker et de Dutch : les cartes ne sont visibles que pour le joueur dont c'est le tour.
 - **Joueurs IA** : chaque siège peut être « Humain » ou « IA » (ZIA). Au poker, les IA jouent avec la formule de Chen et le Monte-Carlo, plus prudemment à plusieurs ; au blackjack, elles suivent la stratégie de base (avec des erreurs aux niveaux faibles). Leur niveau se règle dans Options. La partie s'arrête quand il ne reste plus d'humain.
 - Quitter avant la fin (deux appuis) rend les mises en cours et affiche le classement.
 
 ### Aide, mode débutant et tutoriel
-- **Tutoriel au lancement** : 5 pages (règles du blackjack et du poker, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
+- **Tutoriel au lancement** : 6 pages (règles du blackjack, du poker et de Dutch, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
 - **Bouton « ? »** dans chaque partie : rappel des règles (et du classement des mains au poker).
 - **Mode débutant** (Options, aide en jeu ou fin de tutoriel) : un bandeau « Conseil » explique la meilleure décision : stratégie de base au blackjack (tirer, rester, doubler et pourquoi), force de la main et cote du pot au poker.
 
@@ -57,7 +66,7 @@ vibrations, mode débutant, tutoriel, et réinitialisation en deux étapes (`use
 project.godot            # Réglages (portrait 540x960, renderer Compatibilité, autoloads Bankroll et Stats)
 export_presets.cfg       # Préréglage d'export Android (arm64, APK)
 icon.svg
-scenes/                  # home / blackjack / poker / stats (Options) / setup / multi_* / results / tutorial (un nœud Control + son script)
+scenes/                  # home / blackjack / poker / dutch / about / stats (Options) / setup / multi_* / results / tutorial (un nœud Control + son script)
 scripts/
 ├── bankroll_state.gd    # Autoload « Bankroll » : banque commune + record + sauvegarde
 ├── local_session.gd     # Paramètres de la partie multijoueur locale (jeu, joueurs, jetons, classement)
@@ -72,13 +81,16 @@ scripts/
 │   ├── blackjack_engine.gd        # Moteur blackjack (règles + croupier IA)
 │   ├── poker_engine.gd            # Moteur poker heads-up (machine à états + IA ZIA)
 │   ├── multi_blackjack_engine.gd  # Blackjack 2–5 joueurs (même appareil)
-│   └── poker_table_engine.gd      # Poker 2–6 joueurs : blinds croissantes, pots annexes
+│   ├── poker_table_engine.gd      # Poker 2–6 joueurs : blinds croissantes, pots annexes
+│   └── dutch_engine.gd            # Dutch 2–5 joueurs : pouvoirs, mémoire, IA
 └── ui/
     ├── ui_kit.gd        # Palette feutre vert/or + fabriques de widgets
     ├── card_view.gd     # Carte dessinée en code (pas d'emoji ni d'image)
     ├── card_row.gd      # Rangée de cartes animée (apparition, retournement)
     ├── help_content.gd / help_view.gd / help_overlay.gd  # Règles, bouton « ? »
     ├── tutorial_screen.gd   # Tutoriel de démarrage
+    ├── dutch_screen.gd / card_button.gd  # Dutch (solo et local) et carte tapable
+    ├── about_screen.gd      # À propos : version 0.0.01.PR.PUSH (scripts/app_info.gd)
     ├── coin_label.gd    # « montant + jeton » (compteur animé)
     ├── chip_button.gd   # Jeton de casino cliquable
     ├── chip_pile.gd     # Piles de jetons pour une mise / un pot
@@ -112,7 +124,7 @@ Le workflow [Build APK](.github/workflows/build-apk.yml) (image `barichello/godo
 1. Prépare les templates d'export et les réglages Android,
 2. Importe le projet, lance les **tests logiques** et le **test de fumée** (bloquants),
 3. Choisit la clé de signature (voir ci-dessous),
-4. Numérote la version (`versionCode` = numéro de run, `versionName` = `config/version` du projet),
+4. Numérote la version `0.0.01.xxx.yyy` (affichée dans **À propos**) : `xxx` = numéro de la dernière PR fusionnée (API GitHub), `yyy` = numéro du run (= du push). Décalages réglables via les variables de dépôt `PR_OFFSET` et `PUSH_OFFSET` (Settings → Variables → Actions) ; sans réponse de l'API, `xxx` vaut 000. `versionCode` = numéro de run. En local : `0.0.01.000.000`.
 5. Exporte l'APK **release** (`arm64-v8a`),
 6. Publie l'APK en artefact `aszimut-release-apk` et un résumé dans l'onglet du run.
 
