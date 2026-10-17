@@ -16,6 +16,13 @@ var _logo_cards: Array[CardView] = []
 
 
 func _ready() -> void:
+	# Tutoriel au premier affichage de la session, sauf si le joueur a coché « ne plus afficher ».
+	if Stats.show_tutorial and not StatsState.tutorial_checked:
+		StatsState.tutorial_checked = true
+		TutorialScreen.return_scene = TutorialScreen.HOME_SCENE
+		get_tree().change_scene_to_file.call_deferred(TutorialScreen.TUTORIAL_SCENE)
+		return
+	StatsState.tutorial_checked = true
 	add_child(UIKit.background())
 
 	var margin: MarginContainer = MarginContainer.new()
@@ -97,7 +104,7 @@ func _ready() -> void:
 	spacer_fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(spacer_fill)
 
-	var stats_btn: Button = UIKit.outline_button("Statistiques & réglages", UIKit.TEXT_SOFT, 16)
+	var stats_btn: Button = UIKit.outline_button("Options & statistiques", UIKit.TEXT_SOFT, 16)
 	stats_btn.pressed.connect(_open.bind(STATS_SCENE))
 	col.add_child(stats_btn)
 	var version: String = str(ProjectSettings.get_setting("application/config/version", ""))

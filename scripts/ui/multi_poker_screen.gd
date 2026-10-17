@@ -29,6 +29,10 @@ var _cover: Control
 var _cover_name: Label
 var _cover_button: Button
 var _runout_timer: Timer
+var _bot_timer: Timer
+var _advice_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _advice_key: String = ""
+var _advice_text: String = ""
 
 ## Joueur qui a confirmé tenir l'appareil (ses cartes sont visibles) ; -1 si personne.
 var _unlocked_for: int = -1
@@ -37,7 +41,9 @@ var _result_key: String = ""
 
 
 func _ready() -> void:
-	engine = PokerTableEngine.new(LocalSession.player_names(), LocalSession.chips)
+	engine = PokerTableEngine.new(
+		LocalSession.player_names(), LocalSession.chips, LocalSession.bot_flags(), Stats.difficulty
+	)
 	engine.changed.connect(_refresh)
 
 	_runout_timer = Timer.new()
@@ -45,6 +51,12 @@ func _ready() -> void:
 	_runout_timer.wait_time = RUNOUT_DELAY
 	_runout_timer.timeout.connect(_on_runout)
 	add_child(_runout_timer)
+
+	_bot_timer = Timer.new()
+	_bot_timer.one_shot = true
+	_bot_timer.wait_time = 1.0
+	_bot_timer.timeout.connect(engine.bot_act)
+	add_child(_bot_timer)
 
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
@@ -106,9 +118,9 @@ func _build_top_bar() -> Control:
 	mid.add_child(_blinds_label)
 	bar.add_child(mid)
 
-	var pad: Control = Control.new()
-	pad.custom_minimum_size = Vector2(60, 0)
-	bar.add_child(pad)
+	var help: Button = UIKit.help_button()
+	help.pressed.connect(_open_help.bind(HelpContent.Topic.POKER))
+	bar.add_child(help)
 	return bar
 
 
@@ -247,9 +259,11 @@ func _refresh() -> void:
 	_quit_armed = false
 	_quit_button.text = "‹ Terminer"
 
-	if e.hand_over or e.runout or not e.can_act():
+	if e.hand_over or e.runout or not e.can_act() or e.current_is_bot():
 		_unlocked_for = -1
-	var needs_cover: bool = e.can_act() and not e.runout and _unlocked_for != e.to_act
+	var needs_cover: bool = (
+		e.can_act() and not e.runout and not e.current_is_bot() and _unlocked_for != e.to_act
+	)
 	if needs_cover and not _cover.visible:
 		_cover_name.text = e.seats[e.to_act].name
 		_cover_button.text = "Je suis %s" % e.seats[e.to_act].name
@@ -279,6 +293,8 @@ func _refresh() -> void:
 
 	if e.runout and _runout_timer.is_stopped():
 		_runout_timer.start()
+	if e.current_is_bot() and _bot_timer.is_stopped():
+		_bot_timer.start()
 
 
 func _refresh_turn() -> void:
@@ -290,6 +306,8 @@ func _refresh_turn() -> void:
 		text = "Main %d terminée" % e.hand_number
 	elif e.runout:
 		text = "Tapis — le board se dévoile…"
+	elif e.current_is_bot():
+		text = "%s réfléchit…" % e.seats[e.to_act].name
 	elif e.can_act():
 		text = "Au tour de %s" % e.seats[e.to_act].name
 	if text != _turn_label.text:
@@ -365,8 +383,11 @@ func _refresh_result() -> void:
 		if s.out and s.start_stack > 0 and s.stack == 0:
 			lines.append("%s est éliminé." % s.name)
 	if e.is_game_over() and not e.aborted:
-		var order: Array[int] = e.standings()
-		lines.append("%s remporte la partie !" % e.seats[order[0]].name)
+		if e.has_humans and e.humans_alive() == 0:
+			lines.append("Tous les joueurs humains sont éliminés : partie terminée.")
+		else:
+			var order: Array[int] = e.standings()
+			lines.append("%s remporte la partie !" % e.seats[order[0]].name)
 	_result_label.text = "\n".join(lines)
 	_result_panel.add_theme_stylebox_override("panel", UIKit.banner_style(UIKit.Banner.WIN))
 	var key: String = "%d/%s" % [e.hand_number, _result_label.text]
@@ -424,6 +445,10 @@ func _rebuild_actions() -> void:
 		var wait: Label = UIKit.label("Le board se dévoile…", 16, UIKit.TEXT_SOFT)
 		wait.custom_minimum_size = Vector2(0, 56)
 		_actions.add_child(wait)
+	elif e.current_is_bot():
+		var think: Label = UIKit.label("%s réfléchit…" % e.seats[e.to_act].name, 16, UIKit.TEXT_SOFT)
+		think.custom_minimum_size = Vector2(0, 56)
+		_actions.add_child(think)
 	elif e.can_act() and _unlocked_for == e.to_act:
 		_actions.add_child(_build_player_actions())
 
@@ -433,6 +458,9 @@ func _build_player_actions() -> Control:
 	var i: int = e.to_act
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
+
+	if Stats.beginner:
+		col.add_child(UIKit.advice_panel(_advice(i)))
 
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -454,6 +482,24 @@ func _build_player_actions() -> Control:
 	if e.can_raise(i):
 		col.add_child(_build_raise_panel())
 	return col
+
+
+## Conseil du mode débutant pour le siège `i` (mis en cache tant que la situation ne change pas).
+func _advice(i: int) -> String:
+	var e: PokerTableEngine = engine
+	var opponents: int = 0
+	for j: int in e.seats.size():
+		if j != i and not e.seats[j].folded:
+			opponents += 1
+	var key: String = "%d|%s|%s|%d|%d|%s" % [i, e.seats[i].hole, e.board, e.pot(), e.to_call(i), e.can_raise(i)]
+	if key != _advice_key:
+		_advice_key = key
+		_advice_rng.randomize()
+		var result: Dictionary = PokerAdvisor.advise(
+			e.seats[i].hole, e.board, e.pot(), e.to_call(i), opponents, e.can_raise(i), _advice_rng
+		)
+		_advice_text = str(result["text"])
+	return _advice_text
 
 
 func _build_raise_panel() -> Control:
@@ -514,6 +560,11 @@ func _build_raise_panel() -> Control:
 # --- Événements et navigation -----------------------------------------------
 
 
+func _open_help(topic: int) -> void:
+	var overlay: HelpOverlay = HelpOverlay.open(self, topic)
+	overlay.closed.connect(_refresh)
+
+
 func _on_cover_pressed() -> void:
 	if not engine.can_act():
 		return
@@ -553,4 +604,7 @@ func _show_results() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_on_quit_pressed()
+		if HelpOverlay.is_open(self):
+			HelpOverlay.close_in(self)
+		else:
+			_on_quit_pressed()

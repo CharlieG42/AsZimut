@@ -68,6 +68,10 @@ func _build_top_bar() -> Control:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(title)
 
+	var help: Button = UIKit.help_button()
+	help.pressed.connect(_open_help.bind(HelpContent.Topic.BLACKJACK))
+	bar.add_child(help)
+
 	_bank = CoinLabel.new(17, UIKit.GOLD)
 	_bank.custom_minimum_size = Vector2(110, 0)
 	bar.add_child(_bank)
@@ -165,6 +169,9 @@ func _rebuild_controls() -> void:
 		BlackjackEngine.Phase.BET:
 			_controls.add_child(_build_bet_panel())
 		BlackjackEngine.Phase.PLAYER:
+			if Stats.beginner:
+				var advice: String = BlackjackAdvisor.explain(engine.player, engine.dealer[0], engine.can_double())
+				_controls.add_child(UIKit.advice_panel(advice))
 			_controls.add_child(_build_action_buttons())
 		BlackjackEngine.Phase.DEALER:
 			var wait: Label = UIKit.label("Le croupier joue…", 16, UIKit.TEXT_SOFT)
@@ -206,6 +213,9 @@ func _build_bet_panel() -> Control:
 		chips.add_child(chip_btn)
 	col.add_child(chips)
 
+	if Stats.beginner:
+		col.add_child(UIKit.advice_panel("Misez peu (5 à 10 % de votre pile) pour durer plus longtemps."))
+
 	var deal: Button = UIKit.button("Distribuer", UIKit.GOLD, UIKit.INK, 20)
 	deal.disabled = not (engine.bet >= BlackjackEngine.MIN_BET and engine.bet <= Bankroll.value)
 	deal.pressed.connect(engine.deal)
@@ -242,10 +252,18 @@ func _build_action_buttons() -> Control:
 	return row
 
 
+func _open_help(topic: int) -> void:
+	var overlay: HelpOverlay = HelpOverlay.open(self, topic)
+	overlay.closed.connect(_refresh)
+
+
 func _go_home() -> void:
 	get_tree().change_scene_to_file(HOME_SCENE)
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_go_home()
+		if HelpOverlay.is_open(self):
+			HelpOverlay.close_in(self)
+		else:
+			_go_home()

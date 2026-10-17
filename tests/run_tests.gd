@@ -22,6 +22,9 @@ func _initialize() -> void:
 	_test_table_flow()
 	_test_table_simulation()
 	_test_multi_blackjack()
+	_test_blackjack_advisor()
+	_test_poker_advisor()
+	_test_bots()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -635,3 +638,146 @@ func _test_multi_blackjack() -> void:
 	t.add_to_bet(10)
 	t.confirm_bet()
 	_check(t.phase != MultiBlackjackEngine.Phase.BET and t.seats[2].hand.size() == 2, "cartes distribuées après la dernière mise")
+
+
+# --- Conseillers et bots --------------------------------------------------------
+
+
+func _bj_move(hand: Array, up_rank: int, can_double: bool = true) -> BlackjackAdvisor.Move:
+	return BlackjackAdvisor.recommend(_hand(hand), _c(up_rank, 2), can_double)
+
+
+func _test_blackjack_advisor() -> void:
+	var H: BlackjackAdvisor.Move = BlackjackAdvisor.Move.HIT
+	var S: BlackjackAdvisor.Move = BlackjackAdvisor.Move.STAND
+	var D: BlackjackAdvisor.Move = BlackjackAdvisor.Move.DOUBLE
+	_check(_bj_move([[10, 0], [6, 1]], 10) == H, "16 contre 10 : tirer")
+	_check(_bj_move([[10, 0], [6, 1]], 6) == S, "16 contre 6 : rester")
+	_check(_bj_move([[7, 0], [4, 1]], 6) == D, "11 contre 6 : doubler")
+	_check(_bj_move([[7, 0], [4, 1]], 14) == H, "11 contre As : tirer")
+	_check(_bj_move([[7, 0], [4, 1]], 6, false) == H, "11 sans double : tirer")
+	_check(_bj_move([[5, 0], [4, 1]], 5) == D, "9 contre 5 : doubler")
+	_check(_bj_move([[5, 0], [4, 1]], 9) == H, "9 contre 9 : tirer")
+	_check(_bj_move([[10, 0], [2, 1]], 3) == H, "12 contre 3 : tirer")
+	_check(_bj_move([[10, 0], [2, 1]], 5) == S, "12 contre 5 : rester")
+	_check(_bj_move([[10, 0], [8, 1]], 14) == S, "18 dur : rester")
+	_check(_bj_move([[3, 0], [4, 1]], 10) == H, "7 : tirer")
+	_check(_bj_move([[14, 0], [7, 1]], 9) == H, "A+7 (18 souple) contre 9 : tirer")
+	_check(_bj_move([[14, 0], [7, 1]], 6) == D, "A+7 contre 6 : doubler")
+	_check(_bj_move([[14, 0], [7, 1]], 6, false) == S, "A+7 contre 6 sans double : rester")
+	_check(_bj_move([[14, 0], [7, 1]], 7) == S, "A+7 contre 7 : rester")
+	_check(_bj_move([[14, 0], [9, 1]], 6) == S, "A+9 : rester")
+	_check(_bj_move([[14, 0], [6, 1]], 3) == D, "A+6 contre 3 : doubler")
+	_check(_bj_move([[14, 0], [6, 1]], 10) == H, "A+6 contre 10 : tirer")
+	_check(BlackjackAdvisor.is_soft(_hand([[14, 0], [6, 1]])), "A+6 est souple")
+	_check(not BlackjackAdvisor.is_soft(_hand([[14, 0], [6, 1], [10, 2]])), "A+6+10 est dur")
+	_check(BlackjackAdvisor.explain(_hand([[7, 0], [4, 1]]), _c(6, 2), true).begins_with("Doublez"), "explication doubler")
+	_check(BlackjackAdvisor.explain(_hand([[10, 0], [8, 1]]), _c(6, 2), true).begins_with("Restez"), "explication rester")
+	_check(BlackjackAdvisor.explain(_hand([[10, 0], [6, 1]]), _c(10, 2), true).begins_with("Tirez"), "explication tirer")
+
+	# Les erreurs des bots ne produisent jamais de coup illégal.
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = 5
+	var legal: bool = true
+	for _i: int in 300:
+		var hand: Array[int] = [r.randi_range(0, 51), r.randi_range(0, 51)]
+		var m: BlackjackAdvisor.Move = BlackjackAdvisor.bot_move(hand, r.randi_range(0, 51), true, 0.5, r)
+		if m < 0 or m > 2:
+			legal = false
+	_check(legal, "coups de bot valides")
+
+
+func _test_poker_advisor() -> void:
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = 77
+	var aces: Dictionary = PokerAdvisor.advise(_hand([[14, 0], [14, 1]]), [] as Array[int], 30, 0, 1, true, r)
+	_check(aces["move"] == PokerAdvisor.Move.RAISE, "AA sans mise à payer : miser")
+	var trash: Dictionary = PokerAdvisor.advise(_hand([[7, 0], [2, 1]]), [] as Array[int], 100, 80, 1, true, r)
+	_check(trash["move"] == PokerAdvisor.Move.FOLD, "72 face à une grosse mise : se coucher")
+	var check: Dictionary = PokerAdvisor.advise(_hand([[7, 0], [2, 1]]), [] as Array[int], 30, 0, 1, true, r)
+	_check(check["move"] == PokerAdvisor.Move.CHECK, "main faible gratuite : checker")
+	var board: Array[int] = _hand([[14, 2], [9, 3], [4, 0]])
+	var top: Dictionary = PokerAdvisor.advise(_hand([[14, 0], [14, 1]]), board, 100, 40, 1, true, r)
+	_check(top["move"] == PokerAdvisor.Move.RAISE, "brelan d'As : relancer")
+	var multi: Dictionary = PokerAdvisor.advise(_hand([[14, 0], [14, 1]]), [] as Array[int], 30, 0, 4, true, r)
+	_check(float(multi["equity"]) < float(aces["equity"]), "plus d'adversaires : moins de chances")
+	_check(str(aces["text"]).contains("%"), "le conseil indique les chances de gagner")
+
+
+func _test_bots() -> void:
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = 3
+	var bad: int = 0
+	var stuck: int = 0
+	var finished: int = 0
+	for game: int in 24:
+		var n: int = 2 + game % 5
+		var bots: Array[bool] = []
+		for _i: int in n:
+			bots.append(true)
+		var e: PokerTableEngine = PokerTableEngine.new(_names(n), 300, bots, game % 3)
+		e.rng.seed = 900 + game
+		var hands: int = 0
+		while not e.is_game_over() and hands < 300:
+			hands += 1
+			e.start_hand()
+			var steps: int = 0
+			while not e.hand_over and steps < 300:
+				steps += 1
+				if e.can_act():
+					e.bot_act()
+				else:
+					e.advance_street()
+				var sum: int = e.pot()
+				for s: PokerTableEngine.Seat in e.seats:
+					sum += s.stack
+				if sum != e.total_chips:
+					bad += 1
+			if not e.hand_over:
+				stuck += 1
+				break
+		if e.is_game_over():
+			finished += 1
+	_check(bad == 0, "bots poker : jetons conservés (%d anomalies)" % bad)
+	_check(stuck == 0, "bots poker : aucune main bloquée (%d)" % stuck)
+	_check(finished >= 18, "bots poker : les parties se terminent (%d/24)" % finished)
+
+	# Humain + bots : la partie s'arrête quand l'humain n'a plus de jetons.
+	var mixed: PokerTableEngine = PokerTableEngine.new(_names(3), 200, [false, true, true] as Array[bool], 0)
+	mixed.rng.seed = 12
+	_check(mixed.has_humans and mixed.seats[1].is_bot and not mixed.seats[0].is_bot, "sièges humain/bot")
+	mixed.seats[0].stack = 0
+	mixed.seats[0].out = true
+	mixed.hand_over = true
+	_check(mixed.is_game_over(), "plus d'humain : fin de partie")
+
+	# Blackjack avec bots seuls.
+	var anomalies: int = 0
+	for game: int in 15:
+		var n2: int = 2 + game % 4
+		var bots2: Array[bool] = []
+		for _i: int in n2:
+			bots2.append(true)
+		var b: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(n2), 400, bots2, game % 3)
+		b.rng.seed = 40 + game
+		var rounds: int = 0
+		while not b.is_game_over() and rounds < 40:
+			rounds += 1
+			var guard: int = 0
+			while b.phase == MultiBlackjackEngine.Phase.BET and guard < 20:
+				guard += 1
+				b.bot_bet()
+			guard = 0
+			while b.phase == MultiBlackjackEngine.Phase.PLAY and guard < 100:
+				guard += 1
+				b.bot_play()
+			if b.phase != MultiBlackjackEngine.Phase.DEALER:
+				anomalies += 1
+				break
+			b.dealer_plays()
+			for s: MultiBlackjackEngine.Seat in b.seats:
+				if s.stack < 0:
+					anomalies += 1
+			b.next_round()
+	_check(anomalies == 0, "bots blackjack : manches cohérentes (%d)" % anomalies)
+	_check(r.randf() >= 0.0, "fin des tests bots")

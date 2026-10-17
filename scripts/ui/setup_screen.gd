@@ -69,14 +69,32 @@ func _rebuild() -> void:
 	var players_box: VBoxContainer = _section("Joueurs")
 	players_box.add_child(_stepper())
 	for i: int in LocalSession.count:
+		var row: HBoxContainer = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
 		var edit: LineEdit = LineEdit.new()
-		edit.placeholder_text = "Joueur %d" % (i + 1)
+		edit.placeholder_text = "ZIA" if LocalSession.bots[i] else "Joueur %d" % (i + 1)
 		edit.text = LocalSession.names[i]
 		edit.max_length = 12
+		edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		edit.custom_minimum_size = Vector2(0, 46)
 		edit.add_theme_font_size_override("font_size", 17)
 		edit.text_changed.connect(_on_name.bind(i))
-		players_box.add_child(edit)
+		row.add_child(edit)
+		var is_bot: bool = LocalSession.bots[i]
+		var kind: Button = UIKit.outline_button(
+			"IA" if is_bot else "Humain", UIKit.GOLD if is_bot else Color.WHITE, 15
+		)
+		kind.custom_minimum_size = Vector2(96, 46)
+		kind.pressed.connect(_on_kind.bind(i))
+		row.add_child(kind)
+		players_box.add_child(row)
+	var bots_note: Label = UIKit.label(
+		"« IA » confie ce siège à ZIA (niveau %s, réglable dans Options)." % PokerEngine.difficulty_name(Stats.difficulty),
+		12,
+		UIKit.TEXT_SOFT
+	)
+	bots_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	players_box.add_child(bots_note)
 
 	# Jetons
 	var chips_box: VBoxContainer = _section("Jetons de départ par joueur")
@@ -95,8 +113,12 @@ func _rebuild() -> void:
 
 	_content.add_child(UIKit.spacer(4))
 	var start: Button = UIKit.button("Lancer la partie", UIKit.GOLD, UIKit.INK, 20)
+	start.disabled = LocalSession.human_count() == 0
 	start.pressed.connect(_start)
 	_content.add_child(start)
+	if LocalSession.human_count() == 0:
+		var warn: Label = UIKit.label("Il faut au moins un joueur humain.", 13, UIKit.WARNING_TEXT)
+		_content.add_child(warn)
 
 
 func _section(title: String) -> VBoxContainer:
@@ -158,6 +180,11 @@ func _on_count(delta: int) -> void:
 
 func _on_chips(index: int) -> void:
 	LocalSession.chips = LocalSession.CHIP_CHOICES[index]
+	_rebuild()
+
+
+func _on_kind(index: int) -> void:
+	LocalSession.bots[index] = not LocalSession.bots[index]
 	_rebuild()
 
 

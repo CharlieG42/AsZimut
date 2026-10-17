@@ -18,6 +18,7 @@ class Seat extends RefCounted:
 	var stack: int
 	var bet: int = 0
 	var ready: bool = false  # mise validée
+	var is_bot: bool = false
 	var hand: Array[int] = []
 	var done: bool = false  # a fini de jouer (reste, 21 ou dépasse)
 	var out: bool = false  # n'a plus de quoi miser
@@ -38,11 +39,18 @@ var current: int = -1
 var revealed: bool = false
 var rounds: int = 0
 var aborted: bool = false
+var level: int = 1
+var has_humans: bool = false
 
 
-func _init(names: Array[String], chips: int) -> void:
-	for n: String in names:
-		seats.append(Seat.new(n, chips))
+func _init(names: Array[String], chips: int, bots: Array[bool] = [], bot_level: int = 1) -> void:
+	level = clampi(bot_level, 0, 2)
+	for i: int in names.size():
+		var seat: Seat = Seat.new(names[i], chips)
+		seat.is_bot = i < bots.size() and bots[i]
+		if not seat.is_bot:
+			has_humans = true
+		seats.append(seat)
 	rng.randomize()
 	deck = Cards.shuffled_deck(rng)
 	current = _next_bettor(-1)
@@ -59,8 +67,48 @@ func alive_count() -> int:
 	return n
 
 
+func humans_alive() -> int:
+	var n: int = 0
+	for s: Seat in seats:
+		if not s.is_bot and not s.out:
+			n += 1
+	return n
+
+
 func is_game_over() -> bool:
-	return aborted or alive_count() == 0
+	return aborted or alive_count() == 0 or (has_humans and humans_alive() == 0)
+
+
+func current_is_bot() -> bool:
+	return current >= 0 and seats[current].is_bot and phase in [Phase.BET, Phase.PLAY]
+
+
+## Mise d'un bot : environ 6 % de sa pile, arrondie à 10, entre 10 et 100.
+func bot_bet() -> void:
+	if phase != Phase.BET or not current_is_bot():
+		return
+	var s: Seat = seats[current]
+	var amount: int = clampi(snappedi(roundi(s.stack * 0.06), 10), MIN_BET, 100)
+	s.bet = mini(amount, s.stack)
+	confirm_bet()
+
+
+## Un coup du bot courant (stratégie de base, avec des erreurs aux niveaux faibles).
+func bot_play() -> void:
+	if phase != Phase.PLAY or not current_is_bot():
+		return
+	var errors: Array[float] = [0.25, 0.08, 0.0]
+	var s: Seat = seats[current]
+	var move: BlackjackAdvisor.Move = BlackjackAdvisor.bot_move(
+		s.hand, dealer[0], can_double(), errors[level], rng
+	)
+	match move:
+		BlackjackAdvisor.Move.HIT:
+			hit()
+		BlackjackAdvisor.Move.DOUBLE:
+			double_down()
+		_:
+			stand()
 
 
 func can_double() -> bool:

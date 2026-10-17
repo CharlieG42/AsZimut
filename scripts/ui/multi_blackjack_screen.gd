@@ -18,10 +18,13 @@ var _seat_nodes: Array[Dictionary] = []
 var _controls: VBoxContainer
 var _dealer_timer: Timer
 var _turn_key: int = -999
+var _bot_timer: Timer
 
 
 func _ready() -> void:
-	engine = MultiBlackjackEngine.new(LocalSession.player_names(), LocalSession.chips)
+	engine = MultiBlackjackEngine.new(
+		LocalSession.player_names(), LocalSession.chips, LocalSession.bot_flags(), Stats.difficulty
+	)
 	engine.changed.connect(_refresh)
 	engine.round_finished.connect(_on_round_finished)
 
@@ -30,6 +33,12 @@ func _ready() -> void:
 	_dealer_timer.wait_time = 0.9
 	_dealer_timer.timeout.connect(engine.dealer_plays)
 	add_child(_dealer_timer)
+
+	_bot_timer = Timer.new()
+	_bot_timer.one_shot = true
+	_bot_timer.wait_time = 0.8
+	_bot_timer.timeout.connect(_on_bot_timer)
+	add_child(_bot_timer)
 
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
@@ -80,8 +89,12 @@ func _build_top_bar() -> Control:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(title)
 
-	_round_label = UIKit.label("", 14, UIKit.TEXT_SOFT)
-	_round_label.custom_minimum_size = Vector2(100, 0)
+	var help: Button = UIKit.help_button()
+	help.pressed.connect(_open_help.bind(HelpContent.Topic.BLACKJACK))
+	bar.add_child(help)
+
+	_round_label = UIKit.label("", 13, UIKit.TEXT_SOFT)
+	_round_label.custom_minimum_size = Vector2(76, 0)
 	_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	bar.add_child(_round_label)
 	return bar
@@ -169,10 +182,13 @@ func _refresh() -> void:
 	if engine.phase == MultiBlackjackEngine.Phase.DEALER and _dealer_timer.is_stopped():
 		_dealer_timer.start()
 
+	if engine.current_is_bot() and _bot_timer.is_stopped():
+		_bot_timer.start()
+
 	var key: int = engine.phase * 100 + engine.current
 	if key != _turn_key:
 		_turn_key = key
-		if engine.current >= 0:
+		if engine.current >= 0 and not engine.current_is_bot():
 			UIKit.haptic(Stats.haptics, 35)
 			_focus_current.call_deferred()
 
@@ -230,7 +246,7 @@ func _refresh_seat(i: int) -> void:
 				text = "Égalité"
 				color = UIKit.TEXT_SOFT
 	elif is_current and engine.phase == MultiBlackjackEngine.Phase.PLAY:
-		text = "À vous"
+		text = "Joue…" if s.is_bot else "À vous"
 		color = UIKit.GOLD
 	elif s.ready and s.done:
 		var value: int = BlackjackEngine.bj_value(s.hand)
@@ -258,9 +274,15 @@ func _refresh_turn() -> void:
 	match engine.phase:
 		MultiBlackjackEngine.Phase.BET:
 			if engine.current >= 0:
-				text = "%s, placez votre mise" % engine.seats[engine.current].name
+				if engine.current_is_bot():
+					text = "%s mise…" % engine.seats[engine.current].name
+				else:
+					text = "%s, placez votre mise" % engine.seats[engine.current].name
 		MultiBlackjackEngine.Phase.PLAY:
-			text = "%s, à vous de jouer" % engine.seats[engine.current].name
+			if engine.current_is_bot():
+				text = "%s réfléchit…" % engine.seats[engine.current].name
+			else:
+				text = "%s, à vous de jouer" % engine.seats[engine.current].name
 		MultiBlackjackEngine.Phase.DEALER:
 			text = "Le croupier joue…"
 		MultiBlackjackEngine.Phase.DONE:
@@ -276,10 +298,19 @@ func _rebuild_controls() -> void:
 		child.queue_free()
 	match engine.phase:
 		MultiBlackjackEngine.Phase.BET:
-			if engine.current >= 0:
+			if engine.current_is_bot():
+				_controls.add_child(_thinking_label("%s mise…" % engine.seats[engine.current].name))
+			elif engine.current >= 0:
 				_controls.add_child(_build_bet_panel())
 		MultiBlackjackEngine.Phase.PLAY:
-			_controls.add_child(_build_action_buttons())
+			if engine.current_is_bot():
+				_controls.add_child(_thinking_label("%s réfléchit…" % engine.seats[engine.current].name))
+			else:
+				if Stats.beginner:
+					var hand: Array[int] = engine.seats[engine.current].hand
+					var advice: String = BlackjackAdvisor.explain(hand, engine.dealer[0], engine.can_double())
+					_controls.add_child(UIKit.advice_panel(advice))
+				_controls.add_child(_build_action_buttons())
 		MultiBlackjackEngine.Phase.DEALER:
 			var wait: Label = UIKit.label("Le croupier joue…", 16, UIKit.TEXT_SOFT)
 			wait.custom_minimum_size = Vector2(0, 56)
@@ -326,6 +357,9 @@ func _build_bet_panel() -> Control:
 		chips.add_child(chip_btn)
 	col.add_child(chips)
 
+	if Stats.beginner:
+		col.add_child(UIKit.advice_panel("Misez peu (5 à 10 % de votre pile) pour durer plus longtemps."))
+
 	var confirm: Button = UIKit.button("Valider la mise", UIKit.GOLD, UIKit.INK, 20)
 	confirm.disabled = not (s.bet >= MultiBlackjackEngine.MIN_BET and s.bet <= s.stack)
 	confirm.pressed.connect(engine.confirm_bet)
@@ -358,6 +392,25 @@ func _build_action_buttons() -> Control:
 # --- Événements et navigation -----------------------------------------------
 
 
+func _thinking_label(text: String) -> Label:
+	var wait: Label = UIKit.label(text, 16, UIKit.TEXT_SOFT)
+	wait.custom_minimum_size = Vector2(0, 56)
+	return wait
+
+
+func _on_bot_timer() -> void:
+	match engine.phase:
+		MultiBlackjackEngine.Phase.BET:
+			engine.bot_bet()
+		MultiBlackjackEngine.Phase.PLAY:
+			engine.bot_play()
+
+
+func _open_help(topic: int) -> void:
+	var overlay: HelpOverlay = HelpOverlay.open(self, topic)
+	overlay.closed.connect(_refresh)
+
+
 func _on_round_finished() -> void:
 	UIKit.haptic(Stats.haptics, 80)
 
@@ -386,4 +439,7 @@ func _show_results() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_on_quit_pressed()
+		if HelpOverlay.is_open(self):
+			HelpOverlay.close_in(self)
+		else:
+			_on_quit_pressed()

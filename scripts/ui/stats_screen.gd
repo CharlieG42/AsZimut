@@ -1,5 +1,5 @@
 extends Control
-## Statistiques de jeu et réglages (niveau de ZIA, vibrations).
+## Options (niveau de ZIA, aide, tutoriel, vibrations) et statistiques de jeu.
 
 const HOME_SCENE: String = "res://scenes/home.tscn"
 
@@ -40,7 +40,7 @@ func _rebuild() -> void:
 	back.custom_minimum_size = Vector2(110, 44)
 	back.pressed.connect(_go_home)
 	bar.add_child(back)
-	var title: Label = UIKit.label("Statistiques", 22, UIKit.GOLD, true)
+	var title: Label = UIKit.label("Options", 22, UIKit.GOLD, true)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(title)
 	bar.add_child(UIKit.spacer(0))
@@ -100,6 +100,19 @@ func _rebuild() -> void:
 	haptic_box.toggled.connect(Stats.set_haptics)
 	cfg.add_child(haptic_box)
 
+	# Aide
+	var help: VBoxContainer = _section("Aide")
+	var beginner_box: CheckBox = UIKit.check("Mode débutant (conseils pendant la partie)", Stats.beginner)
+	beginner_box.toggled.connect(Stats.set_beginner)
+	help.add_child(beginner_box)
+	var tuto_box: CheckBox = UIKit.check("Afficher le tutoriel au démarrage", Stats.show_tutorial)
+	tuto_box.toggled.connect(Stats.set_show_tutorial)
+	help.add_child(tuto_box)
+	var replay: Button = UIKit.outline_button("Revoir le tutoriel", UIKit.GOLD, 16)
+	replay.custom_minimum_size = Vector2(0, 48)
+	replay.pressed.connect(_replay_tutorial)
+	help.add_child(replay)
+
 	var reset_text: String = "Confirmer l'effacement ?" if _confirm_reset else "Réinitialiser les stats"
 	var reset: Button = UIKit.outline_button(
 		reset_text, UIKit.DANGER if _confirm_reset else UIKit.WARNING_TEXT, 15
@@ -142,6 +155,11 @@ func _net_color(net: int) -> Color:
 	if net < 0:
 		return UIKit.WARNING_TEXT
 	return Color.WHITE
+
+
+func _replay_tutorial() -> void:
+	TutorialScreen.return_scene = "res://scenes/stats.tscn"
+	get_tree().change_scene_to_file(TutorialScreen.TUTORIAL_SCENE)
 
 
 func _on_reset() -> void:

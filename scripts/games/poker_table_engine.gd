@@ -31,6 +31,7 @@ class Seat extends RefCounted:
 	var net: int = 0
 	var won: int = 0
 	var label: String = ""  # « D », « PB », « GB »
+	var is_bot: bool = false
 
 	func _init(player_name: String, chips: int) -> void:
 		name = player_name
@@ -55,13 +56,21 @@ var result_lines: Array[String] = []
 var log_lines: Array[String] = []
 var last_pot: int = 0
 var total_chips: int = 0
+## Niveau des bots (index dans PokerEngine.PROFILES).
+var level: int = 1
+var has_humans: bool = false
 
 var _eliminated: int = 0
 
 
-func _init(names: Array[String], chips: int) -> void:
-	for n: String in names:
-		seats.append(Seat.new(n, chips))
+func _init(names: Array[String], chips: int, bots: Array[bool] = [], bot_level: int = 1) -> void:
+	level = clampi(bot_level, 0, PokerEngine.PROFILES.size() - 1)
+	for i: int in names.size():
+		var seat: Seat = Seat.new(names[i], chips)
+		seat.is_bot = i < bots.size() and bots[i]
+		if not seat.is_bot:
+			has_humans = true
+		seats.append(seat)
 	total_chips = chips * names.size()
 	rng.randomize()
 
@@ -94,8 +103,25 @@ func alive_count() -> int:
 	return n
 
 
+func humans_alive() -> int:
+	var n: int = 0
+	for s: Seat in seats:
+		if not s.is_bot and not s.out and s.stack > 0:
+			n += 1
+	return n
+
+
+## La partie s'arrête s'il ne reste qu'un joueur, ou plus aucun humain.
 func is_game_over() -> bool:
-	return aborted or (hand_over and alive_count() <= 1)
+	if aborted:
+		return true
+	if not hand_over:
+		return false
+	return alive_count() <= 1 or (has_humans and humans_alive() == 0)
+
+
+func current_is_bot() -> bool:
+	return can_act() and seats[to_act].is_bot
 
 
 func can_act() -> bool:
@@ -167,6 +193,71 @@ func standings() -> Array[int]:
 			return sa.out_rank > sb.out_rank
 	)
 	return order
+
+
+# --- Joueurs IA -------------------------------------------------------------
+
+
+func _others_live(i: int) -> int:
+	var n: int = 0
+	for j: int in seats.size():
+		if j != i and not seats[j].folded:
+			n += 1
+	return n
+
+
+## Décision d'un bot pour le siège `i` : {move: "fold"|"call"|"raise", amount}.
+func bot_decision(i: int) -> Dictionary:
+	var prof: Dictionary = PokerEngine.PROFILES[level]
+	var s: Seat = seats[i]
+	var opponents: int = maxi(_others_live(i), 1)
+	var p: float
+	if board.is_empty():
+		p = 0.33 + (PokerAI.chen(s.hole[0], s.hole[1]) / 20.0) * 0.42
+	else:
+		p = PokerAI.win_prob(s.hole, board, int(prof["iters"]), rng)
+	var noise: float = float(prof["noise"])
+	if noise > 0.0:
+		p = clampf(p + rng.randf_range(-noise, noise), 0.0, 1.0)
+	var value_p: float = float(prof["value_p"])
+	var bluff: float = float(prof["bluff"])
+	var margin: float = float(prof["margin"])
+	# À plusieurs, il faut une main plus solide pour miser ou suivre.
+	var tighten: float = 0.05 * float(opponents - 1)
+	var call_amount: int = to_call(i)
+	var pot_now: int = pot()
+	var raisable: bool = can_raise(i)
+
+	if call_amount <= 0:
+		var size: int = maxi(roundi(pot_now * 0.5), big_blind())
+		if raisable and p > value_p + tighten and rng.randf() < 0.85:
+			return {"move": "raise", "amount": current_bet + size}
+		if raisable and opponents == 1 and p < 0.38 and rng.randf() < bluff:
+			return {"move": "raise", "amount": current_bet + size}
+		return {"move": "call", "amount": 0}
+
+	var odds: float = float(call_amount) / float(pot_now + call_amount)
+	if raisable and p > value_p + 0.18 + tighten and rng.randf() < 0.75:
+		return {"move": "raise", "amount": current_bet + maxi(roundi(pot_now * 0.6), min_raise)}
+	if p >= odds + margin + tighten * 0.5:
+		return {"move": "call", "amount": call_amount}
+	if rng.randf() < 0.1 and p > odds * 0.7:
+		return {"move": "call", "amount": call_amount}
+	return {"move": "fold", "amount": 0}
+
+
+## Fait jouer le bot dont c'est le tour (sans effet si c'est un humain).
+func bot_act() -> void:
+	if not current_is_bot():
+		return
+	var d: Dictionary = bot_decision(to_act)
+	match str(d["move"]):
+		"raise":
+			raise_to(int(d["amount"]))
+		"call":
+			check_call()
+		_:
+			fold()
 
 
 # --- Déroulement ------------------------------------------------------------

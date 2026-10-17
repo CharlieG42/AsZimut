@@ -30,7 +30,13 @@ La partie est indépendante de la banque et des statistiques solo.
 - **Poker Hold'em, 2 à 6 joueurs** : tapis, pots annexes, relance au curseur, blinds qui augmentent toutes les 8 mains,
   éliminations et classement final.
 - **Écran « passez l'appareil »** avant chaque tour de poker : les cartes ne sont visibles que pour le joueur dont c'est le tour.
+- **Joueurs IA** : chaque siège peut être « Humain » ou « IA » (ZIA). Au poker, les IA jouent avec la formule de Chen et le Monte-Carlo, plus prudemment à plusieurs ; au blackjack, elles suivent la stratégie de base (avec des erreurs aux niveaux faibles). Leur niveau se règle dans Options. La partie s'arrête quand il ne reste plus d'humain.
 - Quitter avant la fin (deux appuis) rend les mises en cours et affiche le classement.
+
+### Aide, mode débutant et tutoriel
+- **Tutoriel au lancement** : 5 pages (règles du blackjack et du poker, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
+- **Bouton « ? »** dans chaque partie : rappel des règles (et du classement des mains au poker).
+- **Mode débutant** (Options, aide en jeu ou fin de tutoriel) : un bandeau « Conseil » explique la meilleure décision : stratégie de base au blackjack (tirer, rester, doubler et pourquoi), force de la main et cote du pot au poker.
 
 ### IA (ZIA)
 - **Pré-flop** : formule de **Chen** (0–20) pour estimer la force de la main de départ.
@@ -42,8 +48,8 @@ La partie est indépendante de la banque et des statistiques solo.
 La banque est commune aux deux jeux et **sauvegardée sur l'appareil** (`user://aszimut.cfg`), avec le **record** de banque.
 
 ### Statistiques et réglages
-Écran « Statistiques & réglages » : parties, victoires, gains nets, plus gros pot, niveau de ZIA,
-vibrations, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
+Écran « Options & statistiques » : parties, victoires, gains nets, plus gros pot, niveau de ZIA (aussi pour les bots),
+vibrations, mode débutant, tutoriel, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
 
 ## Structure
 
@@ -51,12 +57,14 @@ vibrations, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
 project.godot            # Réglages (portrait 540x960, renderer Compatibilité, autoloads Bankroll et Stats)
 export_presets.cfg       # Préréglage d'export Android (arm64, APK)
 icon.svg
-scenes/                  # home / blackjack / poker / stats / setup / multi_* / results (un nœud Control + son script)
+scenes/                  # home / blackjack / poker / stats (Options) / setup / multi_* / results / tutorial (un nœud Control + son script)
 scripts/
 ├── bankroll_state.gd    # Autoload « Bankroll » : banque commune + record + sauvegarde
 ├── local_session.gd     # Paramètres de la partie multijoueur locale (jeu, joueurs, jetons, classement)
 ├── stats_state.gd       # Autoload « Stats » : statistiques + réglages (niveau IA, vibrations)
 ├── core/
+│   ├── blackjack_advisor.gd # Stratégie de base : conseils débutant + cerveau des bots
+│   ├── poker_advisor.gd     # Force de main, cote du pot, action recommandée
 │   ├── cards.gd         # Cartes = entiers 0..51, deck, mélange
 │   ├── hand_evaluator.gd# Évaluateur 5/7 cartes (scores lexicographiques)
 │   └── poker_ai.gd      # Formule de Chen + Monte-Carlo
@@ -69,6 +77,8 @@ scripts/
     ├── ui_kit.gd        # Palette feutre vert/or + fabriques de widgets
     ├── card_view.gd     # Carte dessinée en code (pas d'emoji ni d'image)
     ├── card_row.gd      # Rangée de cartes animée (apparition, retournement)
+    ├── help_content.gd / help_view.gd / help_overlay.gd  # Règles, bouton « ? »
+    ├── tutorial_screen.gd   # Tutoriel de démarrage
     ├── coin_label.gd    # « montant + jeton » (compteur animé)
     ├── chip_button.gd   # Jeton de casino cliquable
     ├── chip_pile.gd     # Piles de jetons pour une mise / un pot

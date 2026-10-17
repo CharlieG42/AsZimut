@@ -56,6 +56,7 @@ func _run() -> void:
 		quit(1)
 		return
 	stats.persist = false
+	StatsState.tutorial_checked = true  # pas de redirection vers le tutoriel pendant les tests
 
 	await _test_home(bank)
 	await _test_stats(stats)
@@ -64,6 +65,9 @@ func _run() -> void:
 	await _test_setup()
 	await _test_multi_blackjack()
 	await _test_multi_poker()
+	await _test_tutorial_and_options(stats)
+	await _test_help_and_advice(stats, bank)
+	await _test_bots_ui(stats)
 
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
@@ -413,3 +417,241 @@ func _test_multi_poker() -> void:
 		total += int(row["stack"])
 	_check(LocalSession.results.size() == 3 and total == 15000, "classement final : jetons conservés (%d)" % total)
 	await _unmount(screen)
+
+
+func _has_label(node: Node, needle: String) -> bool:
+	if node is Label and (node as Label).text.contains(needle) and (node as Label).is_visible_in_tree():
+		return true
+	for child: Node in node.get_children():
+		if _has_label(child, needle):
+			return true
+	return false
+
+
+func _test_tutorial_and_options(stats: StatsState) -> void:
+	stats.set_beginner(false)
+	stats.set_show_tutorial(true)
+
+	var opts: Node = _mount("res://scenes/stats.tscn")
+	await _frames(3)
+	_check(_find_button(opts, "Revoir le tutoriel") != null, "bouton « Revoir le tutoriel » dans Options")
+	_check(_has_label(opts, "OPTIONS") or _has_label(opts, "Options"), "écran nommé Options")
+	var beginner: Button = _find_button(opts, "Mode débutant (conseils pendant la partie)")
+	_check(beginner != null, "case mode débutant dans Options")
+	if beginner != null:
+		(beginner as BaseButton).button_pressed = true
+		await _frames(2)
+		_check(stats.beginner, "mode débutant activé depuis Options")
+	var tuto_box: Button = _find_button(opts, "Afficher le tutoriel au démarrage")
+	_check(tuto_box != null and (tuto_box as BaseButton).button_pressed, "tutoriel affiché par défaut")
+	if tuto_box != null:
+		(tuto_box as BaseButton).button_pressed = false
+		await _frames(2)
+		_check(not stats.show_tutorial, "tutoriel désactivé depuis Options")
+	stats.set_beginner(false)
+	stats.set_show_tutorial(true)
+	await _unmount(opts)
+
+	var tuto: Node = _mount("res://scenes/tutorial.tscn")
+	await _frames(3)
+	var title: Label = tuto.get("_title") as Label
+	_check(title.text == "Bienvenue sur AsZimut", "première page du tutoriel")
+	_check(_find_button(tuto, "Précédent") == null, "pas de « Précédent » sur la première page")
+	var seen: Array[String] = [title.text]
+	for _i: int in 4:
+		_check(_press(tuto, "Suivant"), "page suivante")
+		await _frames(2)
+		seen.append(title.text)
+	_check(seen.has("Blackjack") and seen.has("Poker"), "pages Blackjack et Poker")
+	_check(seen.has("Classement des mains"), "page classement des mains")
+	_check(_find_button(tuto, "Commencer") != null, "dernière page : « Commencer »")
+	_check(_find_button(tuto, "Mode débutant (conseils pendant la partie)") == null, "libellé distinct sur la dernière page")
+	var last_beginner: Button = _find_button(tuto, "Activer le mode débutant (conseils pendant la partie)")
+	_check(last_beginner != null, "mode débutant proposé en fin de tutoriel")
+	if last_beginner != null:
+		(last_beginner as BaseButton).button_pressed = true
+		await _frames(1)
+		_check(stats.beginner, "mode débutant activé depuis le tutoriel")
+	var hide_box: Button = _find_button(tuto, "Ne plus afficher au démarrage")
+	_check(hide_box != null and not (hide_box as BaseButton).button_pressed, "case « ne plus afficher » décochée au départ")
+	if hide_box != null:
+		(hide_box as BaseButton).button_pressed = true
+		await _frames(1)
+		_check(not stats.show_tutorial, "« ne plus afficher » enregistré")
+		(hide_box as BaseButton).button_pressed = false
+		await _frames(1)
+		_check(stats.show_tutorial, "case décochée : le tutoriel reste affiché")
+	# La page des mains montre les 10 exemples de 5 cartes.
+	_check(_press(tuto, "Précédent"), "retour à la page précédente")
+	await _frames(2)
+	_check(title.text == "Classement des mains", "page classement")
+	_check(_count_face_up(tuto) == 50, "10 mains x 5 cartes affichées (%d)" % _count_face_up(tuto))
+	stats.set_beginner(false)
+	stats.set_show_tutorial(true)
+	await _unmount(tuto)
+
+
+func _test_help_and_advice(stats: StatsState, bank: BankrollState) -> void:
+	stats.set_beginner(false)
+	bank.set_to(1000)
+
+	# Blackjack solo : aide et conseil.
+	var bj: Node = _mount("res://scenes/blackjack.tscn")
+	await _frames(3)
+	var engine: BlackjackEngine = bj.get("engine") as BlackjackEngine
+	engine.rng.seed = 21
+	_check(_press(bj, "?"), "bouton ? (blackjack)")
+	await _frames(2)
+	_check(HelpOverlay.is_open(bj), "aide ouverte")
+	_check(_has_label(bj, "BUT DU JEU"), "règles du blackjack affichées")
+	var toggle: Button = _find_button(bj, "Mode débutant (conseils pendant la partie)")
+	_check(toggle != null, "case mode débutant dans l'aide")
+	if toggle != null:
+		(toggle as BaseButton).button_pressed = true
+		await _frames(1)
+		_check(stats.beginner, "mode débutant activé depuis l'aide")
+	_check(_press(bj, "Fermer"), "fermer l'aide")
+	await _frames(2)
+	_check(not HelpOverlay.is_open(bj), "aide fermée")
+	_check(_has_label(bj, "Misez peu"), "conseil de mise visible en mode débutant")
+	_check(_press(bj, "25"), "jeton")
+	await _frames(1)
+	_check(_press(bj, "Distribuer"), "distribuer")
+	await _frames(3)
+	if engine.phase == BlackjackEngine.Phase.PLAYER:
+		_check(_has_label(bj, "CONSEIL"), "conseil de jeu visible en mode débutant")
+	stats.set_beginner(false)
+	await _frames(1)
+	await _unmount(bj)
+
+	# Poker solo : aide avec classement des mains, conseil.
+	bank.set_to(1000)
+	stats.set_beginner(true)
+	var pk: Node = _mount("res://scenes/poker.tscn")
+	await _frames(3)
+	var pe: PokerEngine = pk.get("engine") as PokerEngine
+	pe.rng.seed = 8
+	_check(_press(pk, "?"), "bouton ? (poker)")
+	await _frames(2)
+	_check(_has_label(pk, "DU PLUS FORT AU PLUS FAIBLE"), "classement des mains dans l'aide du poker")
+	_check(_press(pk, "Fermer l'aide"), "fermer l'aide poker")
+	await _frames(2)
+	var guard: int = 0
+	while not pe.is_player_turn() and guard < 200:
+		guard += 1
+		await _frames(1)
+	await _frames(2)
+	_check(_has_label(pk, "CONSEIL"), "conseil poker visible en mode débutant")
+	_check(_has_label(pk, "chances de gagner"), "le conseil poker indique les chances de gagner")
+	stats.set_beginner(false)
+	await _unmount(pk)
+
+
+func _test_bots_ui(stats: StatsState) -> void:
+	stats.set_beginner(false)
+	stats.set_difficulty(0)
+	# Écran de configuration : bascule humain / IA.
+	LocalSession.game = LocalSession.Game.POKER
+	LocalSession.count = 3
+	LocalSession.names = ["", "", "", "", "", ""]
+	LocalSession.bots = [false, false, false, false, false, false]
+	var setup: Node = _mount("res://scenes/setup.tscn")
+	await _frames(3)
+	_check(_press(setup, "Humain"), "basculer un siège en IA")
+	await _frames(2)
+	_check(LocalSession.bots[0] and LocalSession.human_count() == 2, "siège 1 = IA")
+	_check(_find_button(setup, "IA") != null, "libellé IA")
+	for _i: int in 3:
+		_press(setup, "Humain")
+		await _frames(2)
+	_check(LocalSession.human_count() == 0, "tous les sièges en IA")
+	_check(_find_button(setup, "Lancer la partie").disabled, "impossible de lancer sans humain")
+	_check(_has_label(setup, "au moins un joueur humain"), "message : au moins un humain")
+	var names: Array[String] = LocalSession.player_names()
+	_check(names[0] == "ZIA" and names[1] == "ZIA 2" and names[2] == "ZIA 3", "noms ZIA par défaut")
+	await _unmount(setup)
+
+	# Poker local : 1 humain + 2 bots.
+	LocalSession.count = 3
+	LocalSession.chips = 5000
+	LocalSession.names = ["Ana", "", "", "", "", ""]
+	LocalSession.bots = [false, true, true, false, false, false]
+	var pk: Node = _mount("res://scenes/multi_poker.tscn")
+	await _frames(3)
+	var e: PokerTableEngine = pk.get("engine") as PokerTableEngine
+	_check(e.seats[1].is_bot and e.seats[2].is_bot and not e.seats[0].is_bot, "bots créés (poker local)")
+	_check(e.seats[1].name == "ZIA" and e.seats[2].name == "ZIA 2", "noms des bots")
+	e.rng.seed = 55
+	pk.get("_bot_timer").wait_time = 0.02
+	pk.get("_runout_timer").wait_time = 0.02
+	var hands: int = 0
+	var leaks: int = 0
+	var bot_turns: int = 0
+	var budget: int = 4000
+	while hands < 6 and budget > 0 and not e.is_game_over():
+		budget -= 1
+		await _frames(1)
+		var cover: Control = pk.get("_cover") as Control
+		if e.hand_over:
+			hands += 1
+			if e.is_game_over():
+				break
+			_press(pk, "Main suivante")
+			continue
+		if e.current_is_bot():
+			bot_turns += 1
+			if cover.visible or (pk.get("_hole_box") as Control).visible:
+				leaks += 1
+			continue
+		if cover.visible:
+			_check(_press(pk, "Je suis Ana"), "Ana déverrouille")
+			await _frames(1)
+			continue
+		if e.can_act() and not e.runout:
+			var call_btn: Button = _find_button(pk, "Checker")
+			if call_btn == null:
+				call_btn = _find_button_prefix(pk, "Suivre")
+			if call_btn != null:
+				call_btn.pressed.emit()
+	_check(hands >= 6 or e.is_game_over(), "6 mains avec des bots (%d)" % hands)
+	_check(bot_turns > 0, "les bots ont joué (%d images)" % bot_turns)
+	_check(leaks == 0, "pas d'écran de passage ni de cartes visibles pendant le tour d'un bot")
+	var sum: int = e.pot()
+	for seat: PokerTableEngine.Seat in e.seats:
+		sum += seat.stack
+	_check(sum == 15000, "jetons conservés avec les bots (%d)" % sum)
+	await _unmount(pk)
+
+	# Blackjack local : 1 humain + 2 bots.
+	LocalSession.chips = 500
+	var bj: Node = _mount("res://scenes/multi_blackjack.tscn")
+	await _frames(3)
+	var b: MultiBlackjackEngine = bj.get("engine") as MultiBlackjackEngine
+	b.rng.seed = 91
+	bj.get("_bot_timer").wait_time = 0.02
+	bj.get("_dealer_timer").wait_time = 0.02
+	var rounds: int = 0
+	var budget2: int = 3000
+	while rounds < 4 and budget2 > 0 and not b.is_game_over():
+		budget2 -= 1
+		await _frames(1)
+		match b.phase:
+			MultiBlackjackEngine.Phase.BET:
+				if not b.current_is_bot():
+					if b.seats[b.current].bet < 10:
+						_press(bj, "25")
+					await _frames(1)
+					_press(bj, "Valider la mise")
+			MultiBlackjackEngine.Phase.PLAY:
+				if not b.current_is_bot():
+					_press(bj, "Rester")
+			MultiBlackjackEngine.Phase.DONE:
+				rounds += 1
+				_press(bj, "Manche suivante")
+	_check(rounds >= 4 or b.is_game_over(), "4 manches avec des bots (%d)" % rounds)
+	_check(b.seats[1].is_bot and b.seats[2].is_bot, "bots créés (blackjack local)")
+	await _unmount(bj)
+
+	LocalSession.bots = [false, false, false, false, false, false]
+	LocalSession.names = ["", "", "", "", "", ""]
+	stats.set_difficulty(1)

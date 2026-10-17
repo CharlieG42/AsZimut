@@ -22,6 +22,9 @@ var _player_bet_pile: ChipPile
 var _hand_hint: Label
 var _raise_to: int = 0
 var _last_result: String = ""
+var _advice_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _advice_key: String = ""
+var _advice_text: String = ""
 var _player_dealer_badge: Control
 var _log_box: VBoxContainer
 var _log_panel: PanelContainer
@@ -95,6 +98,10 @@ func _build_top_bar() -> Control:
 	var title: Label = UIKit.label("Poker Hold'em", 21, UIKit.GOLD, true)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(title)
+
+	var help: Button = UIKit.help_button()
+	help.pressed.connect(_open_help.bind(HelpContent.Topic.POKER))
+	bar.add_child(help)
 
 	_stack_label = CoinLabel.new(17, UIKit.GOLD)
 	_stack_label.custom_minimum_size = Vector2(110, 0)
@@ -323,6 +330,9 @@ func _build_player_actions() -> Control:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 
+	if Stats.beginner:
+		col.add_child(UIKit.advice_panel(_advice()))
+
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var fold: Button = UIKit.button("Coucher", UIKit.DANGER)
@@ -339,6 +349,20 @@ func _build_player_actions() -> Control:
 	if engine.raises < 3 and engine.p_stack > 0:
 		col.add_child(_build_raise_panel())
 	return col
+
+
+## Conseil du mode débutant (mis en cache tant que la situation ne change pas).
+func _advice() -> String:
+	var raisable: bool = engine.raises < 3 and engine.p_stack > 0
+	var key: String = "%s|%s|%d|%d|%s" % [engine.player_hole, engine.board, engine.pot, engine.to_call(), raisable]
+	if key != _advice_key:
+		_advice_key = key
+		_advice_rng.randomize()
+		var result: Dictionary = PokerAdvisor.advise(
+			engine.player_hole, engine.board, engine.pot, engine.to_call(), 1, raisable, _advice_rng
+		)
+		_advice_text = str(result["text"])
+	return _advice_text
 
 
 func _build_raise_panel() -> Control:
@@ -409,6 +433,11 @@ func _next_hand() -> void:
 	engine.start_hand(false)
 
 
+func _open_help(topic: int) -> void:
+	var overlay: HelpOverlay = HelpOverlay.open(self, topic)
+	overlay.closed.connect(_refresh)
+
+
 func _leave() -> void:
 	# Quitter en pleine main revient à se coucher.
 	engine.forfeit()
@@ -418,4 +447,7 @@ func _leave() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_leave()
+		if HelpOverlay.is_open(self):
+			HelpOverlay.close_in(self)
+		else:
+			_leave()

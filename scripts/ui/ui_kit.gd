@@ -218,3 +218,99 @@ static func signed(value: int) -> String:
 static func haptic(enabled: bool, duration_ms: int) -> void:
 	if enabled:
 		Input.vibrate_handheld(duration_ms)
+
+
+# --- Aide et conseils -----------------------------------------------------------
+
+
+## Petit bouton rond « ? » pour ouvrir l'aide.
+static func help_button() -> Button:
+	var b: Button = outline_button("?", GOLD, 20)
+	b.custom_minimum_size = Vector2(44, 44)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return b
+
+
+## Bandeau de conseil du mode débutant.
+static func advice_panel(text: String) -> PanelContainer:
+	var p: PanelContainer = PanelContainer.new()
+	var style: StyleBoxFlat = box(Color(0.1, 0.16, 0.26, 0.96), 14, Color(GOLD.r, GOLD.g, GOLD.b, 0.55), 1)
+	style.set_content_margin_all(10)
+	p.add_theme_stylebox_override("panel", style)
+	var col: VBoxContainer = VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	p.add_child(col)
+	var head: Label = label("CONSEIL", 11, GOLD, true)
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	col.add_child(head)
+	var body: Label = label(text, 14, Color(0.9, 0.97, 0.93))
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(body)
+	return p
+
+
+static var _check_off: ImageTexture
+static var _check_on: ImageTexture
+
+
+## Distance signée à un carré arrondi centré (négatif à l'intérieur).
+static func _round_box_distance(px: float, py: float, half: float, radius: float, center: float) -> float:
+	var qx: float = absf(px - center) - (half - radius)
+	var qy: float = absf(py - center) - (half - radius)
+	return Vector2(maxf(qx, 0.0), maxf(qy, 0.0)).length() + minf(maxf(qx, qy), 0.0) - radius
+
+
+static func _segment_distance(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab: Vector2 = b - a
+	var t: float = clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+static func _check_texture(checked: bool) -> ImageTexture:
+	var size: int = 28
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center: float = size / 2.0 - 0.5
+	for y: int in size:
+		for x: int in size:
+			var d: float = _round_box_distance(x, y, size / 2.0 - 2.0, 7.0, center)
+			var color: Color = Color(0, 0, 0, 0)
+			if d <= 0.0:
+				if checked:
+					color = GOLD
+				elif d > -2.2:
+					color = Color(0.82, 0.93, 0.87, 0.9)
+				else:
+					color = Color(0, 0, 0, 0.3)
+				if checked:
+					var p: Vector2 = Vector2(x, y)
+					var line: float = minf(
+						_segment_distance(p, Vector2(7, 14.5), Vector2(12, 19.5)),
+						_segment_distance(p, Vector2(12, 19.5), Vector2(21, 8.5))
+					)
+					if line < 1.9:
+						color = INK
+			elif d < 1.0:
+				color = Color(color.r, color.g, color.b, 0.0)
+			img.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(img)
+
+
+## Case à cocher au style de l'application (visible sur fond sombre).
+static func check(text: String, pressed: bool) -> CheckBox:
+	if _check_off == null:
+		_check_off = _check_texture(false)
+		_check_on = _check_texture(true)
+	var c: CheckBox = CheckBox.new()
+	c.text = text
+	c.button_pressed = pressed
+	c.focus_mode = Control.FOCUS_NONE
+	c.add_theme_font_size_override("font_size", 15)
+	c.add_theme_constant_override("h_separation", 10)
+	for key: String in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+		c.add_theme_color_override(key, Color.WHITE)
+	c.add_theme_icon_override("unchecked", _check_off)
+	c.add_theme_icon_override("checked", _check_on)
+	c.add_theme_icon_override("unchecked_disabled", _check_off)
+	c.add_theme_icon_override("checked_disabled", _check_on)
+	return c
