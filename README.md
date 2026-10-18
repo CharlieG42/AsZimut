@@ -146,6 +146,15 @@ Pour garder la même signature, ajouter ces secrets au dépôt
 | `ANDROID_STORE_PASSWORD` | le mot de passe du keystore |
 | `ANDROID_KEY_PASSWORD` | le mot de passe de la clé (peut différer ; le workflow l'aligne) |
 
+Le script [`.github/scripts/signing.sh`](.github/scripts/signing.sh) vérifie les secrets **un par un** et
+indique dans le résumé du run lequel pose problème : base64 illisible ou fichier qui n'est pas un keystore,
+mot de passe du keystore refusé, alias absent (avec la liste des alias trouvés), ou mot de passe de clé
+incorrect. Les espaces et retours à la ligne collés par erreur sont corrigés automatiquement. Les valeurs
+des secrets ne sont jamais affichées.
+
+Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.keystore` (macOS) ou
+`certutil -encode aszimut.keystore out.txt` (Windows, coller tout le contenu de `out.txt`).
+
 ## Roadmap
 
 - [ ] Sons et effets (distribution, jetons)

@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Préparation de Godot (templates d'export + réglages Android)
         run: |
@@ -76,57 +76,11 @@ jobs:
           KS_PASS: ${{ secrets.ANDROID_STORE_PASSWORD }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -u
-          KS_FILE="$RUNNER_TEMP/aszimut-release.keystore"
-          MODE="temporaire"
-          REASON="aucun secret de signature"
-
-          if [ -n "${KS_B64}" ] && [ -n "${KS_ALIAS}" ] && [ -n "${KS_PASS}" ]; then
-            # Les trois secrets existent : on vérifie qu'ils ouvrent bien la clé.
-            if echo "${KS_B64}" | base64 -d > "$KS_FILE" 2>/dev/null \
-               && keytool -list -keystore "$KS_FILE" -storepass "${KS_PASS}" -alias "${KS_ALIAS}" > /dev/null 2>&1; then
-              MODE="secrets"
-              # Godot utilise un seul mot de passe : on aligne celui de la clé sur celui du keystore.
-              if [ -n "${KEY_PASS}" ] && [ "${KEY_PASS}" != "${KS_PASS}" ]; then
-                if keytool -keypasswd -keystore "$KS_FILE" -storepass "${KS_PASS}" -alias "${KS_ALIAS}" \
-                     -keypass "${KEY_PASS}" -new "${KS_PASS}" > /dev/null 2>&1; then
-                  echo "Mot de passe de clé aligné sur celui du keystore (copie temporaire)."
-                else
-                  MODE="temporaire"
-                  REASON="mot de passe de clé (ANDROID_KEY_PASSWORD) incorrect"
-                  echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
-                fi
-              fi
-            else
-              REASON="secrets présents mais inutilisables (base64, alias ou mot de passe incorrect)"
-              echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
-            fi
-          elif [ -n "${KS_B64}${KS_ALIAS}${KS_PASS}" ]; then
-            REASON="secrets incomplets (il faut les trois)"
-            echo "::warning::${REASON}. Une clé temporaire est utilisée à la place."
-          fi
-
-          if [ "$MODE" = "secrets" ]; then
-            ALIAS="${KS_ALIAS}"
-            PASS="${KS_PASS}"
-            echo "Signature avec la clé des secrets du dépôt."
-          else
-            rm -f "$KS_FILE"
-            ALIAS="aszimut"
-            PASS="aszimut-ci"
-            keytool -genkeypair -v -keystore "$KS_FILE" -alias "$ALIAS" \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass "$PASS" -keypass "$PASS" \
-              -dname "CN=AsZimut,O=WildZimut,C=FR" > /dev/null
-            echo "::notice::Signature avec une clé temporaire (${REASON}). Chaque build a une signature différente : désinstaller l'ancienne version avant d'installer la nouvelle."
-          fi
-
-          {
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS_FILE"
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$ALIAS"
-            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$PASS"
-            echo "SIGN_MODE=$MODE"
-          } >> "$GITHUB_ENV"
+          export KS_FILE="$RUNNER_TEMP/aszimut-release.keystore"
+          export SIGN_LOG=/dev/stdout
+          bash .github/scripts/signing.sh > "$RUNNER_TEMP/sign.env"
+          grep -v '^GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=' "$RUNNER_TEMP/sign.env" | grep -v '^GODOT_ANDROID_KEYSTORE_RELEASE_USER='
+          cat "$RUNNER_TEMP/sign.env" >> "$GITHUB_ENV"
 
       - name: Version 0.0.01.PR.PUSH (dernière PR fusionnée + numéro de push)
         env:
@@ -139,10 +93,14 @@ jobs:
           BASE="$(grep -m1 '^config/version=' project.godot | cut -d'"' -f2 | cut -d. -f1-3)"
           BASE="${BASE:-0.0.01}"
           PR=""
+          command -v jq > /dev/null || { apt-get update -qq && apt-get install -y -qq jq; } > /dev/null 2>&1 || true
+          # Dernière PR fusionnée (parmi les 100 dernières PR fermées), via l'API REST du dépôt.
           RESP="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/search/issues?q=repo:${GITHUB_REPOSITORY}+is:pr+is:merged&sort=created&order=desc&per_page=1" 2>/dev/null || true)"
-          if [ -n "$RESP" ]; then PR="$(echo "$RESP" | jq -r '.items[0].number // empty' 2>/dev/null || true)"; fi
-          if [ -z "$PR" ]; then echo "::warning::Dernière PR fusionnée introuvable : 0 utilisé."; PR=0; fi
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls?state=closed&sort=updated&direction=desc&per_page=100" 2>/dev/null || true)"
+          if [ -n "$RESP" ]; then
+            PR="$(echo "$RESP" | jq -r '[.[] | select(.merged_at != null)] | sort_by(.merged_at) | last | .number // empty' 2>/dev/null || true)"
+          fi
+          if [ -z "$PR" ]; then echo "::notice::Aucune PR fusionnée trouvée : 000 utilisé."; PR=0; fi
           PR=$((PR + ${PR_OFFSET:-0}))
           PUSH=$((GITHUB_RUN_NUMBER + ${PUSH_OFFSET:-0}))
           FULL="$(printf '%s.%03d.%03d' "$BASE" "$PR" "$PUSH")"
@@ -173,12 +131,15 @@ jobs:
               echo "- Signature : **clé des secrets du dépôt** (mises à jour installables par-dessus)."
             else
               echo "- Signature : **clé temporaire** — désinstaller l'ancienne version avant d'installer celle-ci."
+              if [ -n "${SIGN_ISSUE:-}" ]; then
+                echo "- Secret en cause : **\`${SIGN_ISSUE}\`** — ${SIGN_REASON}"
+              fi
             fi
             echo "- Artefact : \`aszimut-release-apk\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publication de l'APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: aszimut-release-apk
           path: build/aszimut.apk
