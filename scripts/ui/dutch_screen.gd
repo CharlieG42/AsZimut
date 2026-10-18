@@ -54,7 +54,7 @@ func _ready() -> void:
 	var names: Array[String] = []
 	var flags: Array[bool] = []
 	if LocalSession.solo:
-		names = ["Vous", "ZIA"]
+		names = [ProfileStore.solo_name(), "ZIA"]
 		flags = [false, true]
 	else:
 		names = LocalSession.player_names()
@@ -222,7 +222,10 @@ func _record_stats() -> void:
 	var won: bool = engine.round_winners.has(p) and not (engine.caller_failed and engine.dutch_caller == p)
 	Stats.record_dutch_round(engine.hand_total(p), won, engine.dutch_caller == p)
 	if engine.phase == DutchEngine.Phase.MATCH_OVER:
-		Stats.record_dutch_match(str(engine.ranking()[0]["name"]) == engine.names[p])
+		var match_won: bool = str(engine.ranking()[0]["name"]) == engine.names[p]
+		Stats.record_dutch_match(match_won)
+		if LocalSession.solo:
+			ProfileStore.record_active("du", match_won, 0, int(engine.totals[p]))
 
 
 func _build_table() -> void:

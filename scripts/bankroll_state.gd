@@ -17,6 +17,10 @@ var persist: bool = true
 var pending: int = 0
 ## Montant rendu au démarrage (pour l'afficher une fois), 0 sinon.
 var refunded: int = 0
+## Joueur actif dont la banque est utilisée en solo ("" = invité : banque de l'appareil).
+var profile_id: String = ""
+var _guest_value: int = START_VALUE
+var _guest_best: int = START_VALUE
 
 
 func _ready() -> void:
@@ -42,15 +46,59 @@ func set_pending(amount: int) -> void:
 	_save()
 
 
+## Banque de l'invité (sauvegardée), même quand un joueur enregistré est actif.
 func to_dict() -> Dictionary:
-	return {"value": value, "best": best}
+	_sync_guest()
+	return {"value": _guest_value, "best": _guest_best}
 
 
 func load_dict(d: Dictionary) -> void:
-	value = maxi(0, int(d.get("value", START_VALUE)))
-	best = maxi(value, int(d.get("best", value)))
+	var v: int = maxi(0, int(d.get("value", START_VALUE)))
+	_guest_value = v
+	_guest_best = maxi(v, int(d.get("best", v)))
 	pending = 0
+	if profile_id == "":
+		value = _guest_value
+		best = _guest_best
 	_commit()
+
+
+## Passe sur la banque d'un joueur enregistré (ou "" pour l'invité) ; relit sa banque si inchangé.
+func use_profile(id: String) -> void:
+	var target: String = id if ProfileStore.exists(id) else ""
+	if target == profile_id:
+		_pull_profile()
+		return
+	_sync_guest()
+	profile_id = target
+	pending = 0
+	if target == "":
+		value = _guest_value
+		best = _guest_best
+	else:
+		_pull_profile()
+	_save()
+	changed.emit()
+
+
+## Relit la banque du profil actif (elle a pu changer pendant une partie locale).
+func refresh_profile() -> void:
+	if profile_id != "":
+		_pull_profile()
+		changed.emit()
+
+
+func _pull_profile() -> void:
+	if profile_id == "":
+		return
+	value = ProfileStore.bank_of(profile_id)
+	best = maxi(value, int(ProfileStore.get_profile(profile_id).get("best_bank", value)))
+
+
+func _sync_guest() -> void:
+	if profile_id == "":
+		_guest_value = value
+		_guest_best = best
 
 
 func reset() -> void:
@@ -67,23 +115,33 @@ func _load() -> void:
 	if not persist:
 		return
 	var cfg: ConfigFile = ConfigFile.new()
-	if cfg.load(save_path) == OK:
-		value = maxi(0, int(cfg.get_value("bank", "value", START_VALUE)))
-		best = maxi(value, int(cfg.get_value("bank", "best", START_VALUE)))
-		var lost: int = int(cfg.get_value("bank", "pending", 0))
-		if lost > 0:
-			refunded = lost
-			value += lost
-			pending = 0
-			_save()
-		changed.emit()
+	if cfg.load(save_path) != OK:
+		profile_id = ProfileStore.active_id()
+		_pull_profile()
+		return
+	value = maxi(0, int(cfg.get_value("bank", "value", START_VALUE)))
+	best = maxi(value, int(cfg.get_value("bank", "best", START_VALUE)))
+	var lost: int = int(cfg.get_value("bank", "pending", 0))
+	_guest_value = value
+	_guest_best = best
+	profile_id = ProfileStore.active_id()
+	_pull_profile()
+	if lost > 0:
+		refunded = lost
+		value += lost
+		pending = 0
+		_save()
+	changed.emit()
 
 
 func _save() -> void:
+	_sync_guest()
+	if profile_id != "":
+		ProfileStore.set_bank(profile_id, value)
 	if not persist:
 		return
 	var cfg: ConfigFile = ConfigFile.new()
-	cfg.set_value("bank", "value", value)
-	cfg.set_value("bank", "best", best)
+	cfg.set_value("bank", "value", _guest_value)
+	cfg.set_value("bank", "best", _guest_best)
 	cfg.set_value("bank", "pending", pending)
 	cfg.save(save_path)

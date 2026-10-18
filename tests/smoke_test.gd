@@ -79,6 +79,7 @@ func _run() -> void:
 	await _test_solo_table_and_resume(bank)
 	await _test_achievements(stats, bank)
 	await _test_profiles_ui()
+	await _test_active_ui(bank)
 	await _test_backup(stats, bank)
 	GameSave.clear()
 
@@ -984,6 +985,9 @@ func _test_profiles_ui() -> void:
 	_press(prof, "Ajouter")
 	await _frames(1)
 	_check(ProfileStore.find_by_name("Mila") != "", "écran Joueurs : ajout")
+	_check(ProfileStore.active_name() == "Mila", "écran Joueurs : le premier joueur créé devient actif")
+	ProfileStore.set_active("")
+	(root.get_node("Bankroll") as BankrollState).use_profile("")
 	var dels: int = 0
 	while _press(prof, "Supprimer") and dels < 1:
 		dels += 1
@@ -1016,6 +1020,65 @@ func _test_profiles_ui() -> void:
 	_unmount(res)
 	LocalSession.use_banks = false
 	LocalSession.profile_ids = ["", "", "", "", "", ""]
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+
+
+func _test_active_ui(bank: BankrollState) -> void:
+	ProfileStore.path = "user://test_profiles_active_ui.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
+	bank.use_profile("")
+	bank.value = 1000
+	var home: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	_check(_find_button_prefix(home, "Joueur : invité") != null, "accueil : bouton joueur (invité)")
+	_unmount(home)
+
+	var prof: Node = _mount("res://scenes/profiles.tscn")
+	await _frames(2)
+	prof.set("_new_name", "Lila")
+	_press(prof, "Ajouter")
+	await _frames(2)
+	var lila: String = ProfileStore.find_by_name("Lila")
+	_check(lila != "" and ProfileStore.active_id() == lila and bank.profile_id == lila, "joueur actif : créé hors multijoueur et sélectionné")
+	_check(_find_button(prof, "✓ Joueur actif en solo") != null, "écran Joueurs : joueur actif repéré")
+	ProfileStore.create("Noa")
+	prof.call("_rebuild")
+	await _frames(2)
+	_check(_press(prof, "Jouer en solo avec ce profil"), "écran Joueurs : choisir un autre joueur actif")
+	await _frames(2)
+	_check(ProfileStore.active_name() == "Noa" and bank.profile_id == ProfileStore.active_id(), "joueur actif : Noa")
+	_check(_press(prof, "Jouer en invité (sans profil)"), "écran Joueurs : retour invité")
+	await _frames(2)
+	_check(ProfileStore.active_id() == "" and bank.profile_id == "", "joueur actif : invité")
+	_unmount(prof)
+
+	# Parties solo avec Lila.
+	ProfileStore.set_active(lila)
+	bank.use_profile(lila)
+	var home2: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	_check(_find_button_prefix(home2, "Joueur : Lila") != null, "accueil : joueur actif affiché")
+	_unmount(home2)
+	var bj: Node = _mount("res://scenes/blackjack.tscn")
+	await _frames(2)
+	bj.call("_on_round_finished", BlackjackEngine.Outcome.WIN, 100)
+	var st: Dictionary = ProfileStore.get_profile(lila)["stats"]
+	_check(int(st["bj"]["games"]) == 1 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 100, "blackjack solo : résultat enregistré pour Lila")
+	_unmount(bj)
+	LocalSession.start_solo_dutch()
+	var dutch: Node = _mount("res://scenes/dutch.tscn")
+	await _frames(2)
+	var de: DutchEngine = dutch.get("engine") as DutchEngine
+	_check(de != null and de.names[0] == "Lila", "dutch solo : le joueur actif porte son nom")
+	_unmount(dutch)
+	LocalSession.solo = false
+	GameSave.clear()
+
+	ProfileStore.set_active("")
+	bank.use_profile("")
+	bank.value = 1000
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
 
 

@@ -30,6 +30,7 @@ func _initialize() -> void:
 	_test_snapshots()
 	_test_pending_refund()
 	_test_profiles()
+	_test_active_player()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1191,3 +1192,60 @@ func _test_profiles() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
 	LocalSession.use_banks = false
 	LocalSession.profile_ids = ["", "", "", "", "", ""]
+
+
+func _test_active_player() -> void:
+	ProfileStore.path = "user://test_profiles_active.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
+	_check(ProfileStore.active_id() == "" and ProfileStore.solo_name() == "Vous", "joueur actif : invité par défaut")
+	var mia: String = ProfileStore.create("Mia")
+	var tom: String = ProfileStore.create("Tom")
+	ProfileStore.set_active(mia)
+	_check(ProfileStore.active_id() == mia and ProfileStore.solo_name() == "Mia", "joueur actif : choisi")
+	ProfileStore.reload()
+	_check(ProfileStore.active_id() == mia, "joueur actif : mémorisé sur disque")
+
+	# Banque solo liée au joueur actif ; la banque d'invité est préservée.
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 700
+	bank.best = 900
+	bank.use_profile(mia)
+	_check(bank.value == ProfileStore.START_BANK and bank.profile_id == mia, "banque solo : celle du joueur actif")
+	bank.add(250)
+	_check(ProfileStore.bank_of(mia) == 1250, "banque solo : gain écrit dans le profil")
+	bank.use_profile(tom)
+	_check(bank.value == 1000 and ProfileStore.bank_of(mia) == 1250, "banque solo : changement de joueur")
+	bank.use_profile("")
+	_check(bank.value == 700 and bank.best == 900, "banque solo : l'invité retrouve sa banque")
+	_check(int(bank.to_dict()["value"]) == 700, "sauvegarde : banque d'invité exportée")
+	# Une partie locale a modifié la banque du profil : relue au retour à l'accueil.
+	bank.use_profile(mia)
+	ProfileStore.set_bank(mia, 3000)
+	bank.refresh_profile()
+	_check(bank.value == 3000, "banque solo : relue après une partie locale")
+
+	# Statistiques solo du joueur actif.
+	ProfileStore.record_active("bj", true, 120)
+	ProfileStore.record_active("bj", false, -50)
+	ProfileStore.record_active("du", true, 0, 14)
+	var st: Dictionary = ProfileStore.get_profile(mia)["stats"]
+	_check(int(st["bj"]["games"]) == 2 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 70, "stats solo : blackjack")
+	_check(int(st["du"]["games"]) == 1 and int(st["du"]["best"]) == 14, "stats solo : Dutch")
+	ProfileStore.set_active("")
+	ProfileStore.record_active("bj", true, 999)
+	_check(int(ProfileStore.get_profile(mia)["stats"]["bj"]["games"]) == 2, "stats solo : invité non enregistré")
+
+	# Suppression du joueur actif et import.
+	ProfileStore.set_active(tom)
+	var snapshot: Dictionary = ProfileStore.export_data()
+	ProfileStore.remove(tom)
+	_check(ProfileStore.active_id() == "", "suppression du joueur actif : retour à l'invité")
+	bank.use_profile(ProfileStore.active_id())
+	_check(bank.profile_id == "", "banque solo : retour à l'invité après suppression")
+	ProfileStore.import_replace(snapshot)
+	_check(ProfileStore.active_id() == tom, "import : joueur actif restauré")
+	bank.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))

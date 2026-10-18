@@ -188,7 +188,7 @@ func _build_player_section() -> Control:
 	var foot: HBoxContainer = HBoxContainer.new()
 	foot.alignment = BoxContainer.ALIGNMENT_CENTER
 	foot.add_theme_constant_override("separation", 10)
-	foot.add_child(UIKit.label("Vous", 18, Color.WHITE, true))
+	foot.add_child(UIKit.label(ProfileStore.solo_name(), 18, Color.WHITE, true))
 	_player_dealer_badge = _dealer_badge()
 	foot.add_child(_player_dealer_badge)
 	col.add_child(foot)
@@ -250,6 +250,7 @@ func _banner_kind() -> int:
 
 func _on_hand_finished(outcome: int, net: int, pot_won: int) -> void:
 	Stats.record_poker(outcome, net, pot_won)
+	ProfileStore.record_active("pk", net > 0, net)
 	Stats.note_bank(Bankroll.value)
 	match outcome:
 		PokerEngine.HandOutcome.WIN:

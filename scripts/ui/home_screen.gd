@@ -12,6 +12,7 @@ var _reload_button: Button
 var _poker_card: GameCard
 var _poker_hint: Label
 var _best: Label
+var _player_button: Button
 var _logo: Control
 var _logo_cards: Array[CardView] = []
 
@@ -55,6 +56,11 @@ func _ready() -> void:
 	col.add_child(UIKit.label("AsZimut", 46, UIKit.GOLD, true))
 	col.add_child(UIKit.label("Blackjack, Poker & Dutch — WildZimut", 14, UIKit.TEXT_SOFT))
 	col.add_child(UIKit.spacer(4))
+
+	_player_button = UIKit.outline_button("", UIKit.TEXT_SOFT, 14)
+	_player_button.custom_minimum_size = Vector2(0, 38)
+	_player_button.pressed.connect(_open_profiles)
+	col.add_child(_player_button)
 
 	var bank_row: HBoxContainer = HBoxContainer.new()
 	bank_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -145,9 +151,15 @@ func _ready() -> void:
 	about_btn.pressed.connect(_open.bind(ABOUT_SCENE))
 	col.add_child(about_btn)
 
+	Bankroll.refresh_profile()
 	Bankroll.changed.connect(_refresh)
 	_refresh()
 	UIKit.fade_in(self)
+
+
+func _open_profiles() -> void:
+	ProfilesScreen.return_scene = LocalSession.HOME_SCENE
+	_open(ProfilesScreen.SCENE)
 
 
 func _open_poker_lobby() -> void:
@@ -182,6 +194,8 @@ func _layout_logo() -> void:
 
 
 func _refresh() -> void:
+	var who: String = ProfileStore.active_name()
+	_player_button.text = "Joueur : %s  ›" % who if who != "" else "Joueur : invité — créer ou choisir un joueur  ›"
 	_bank.set_amount(Bankroll.value)
 	_best.text = "Record : %d" % Bankroll.best
 	_reload_button.visible = Bankroll.value < BlackjackEngine.MIN_BET

@@ -17,7 +17,7 @@ static func _ensure() -> void:
 	if _loaded_from == path:
 		return
 	_loaded_from = path
-	_data = {"profiles": [], "groups": [], "next_id": 1}
+	_data = {"profiles": [], "groups": [], "next_id": 1, "active": ""}
 	if FileAccess.file_exists(path):
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if parsed is Dictionary:
@@ -25,6 +25,7 @@ static func _ensure() -> void:
 			_data["profiles"] = d.get("profiles", [])
 			_data["groups"] = d.get("groups", [])
 			_data["next_id"] = int(d.get("next_id", 1))
+			_data["active"] = str(d.get("active", ""))
 
 
 static func _save() -> void:
@@ -144,6 +145,8 @@ static func rename(id: String, name: String) -> bool:
 
 static func remove(id: String) -> void:
 	_ensure()
+	if str(_data.get("active", "")) == id:
+		_data["active"] = ""
 	var kept: Array = []
 	for p: Variant in _data["profiles"]:
 		if str((p as Dictionary)["id"]) != id:
@@ -175,6 +178,44 @@ static func set_bank(id: String, value: int) -> void:
 static func playable_bank(id: String) -> int:
 	var b: int = bank_of(id)
 	return START_BANK if b < MIN_BANK else b
+
+
+# --- Joueur actif (parties solo) ---------------------------------------------------
+
+
+## Profil qui joue en solo (blackjack, poker, Dutch contre ZIA), "" = invité sans profil.
+static func active_id() -> String:
+	_ensure()
+	var id: String = str(_data.get("active", ""))
+	return id if exists(id) else ""
+
+
+static func active_name() -> String:
+	return name_of(active_id())
+
+
+static func set_active(id: String) -> void:
+	_ensure()
+	_data["active"] = id if exists(id) else ""
+	_save()
+
+
+## Nom affiché pour le joueur humain d'une partie solo.
+static func solo_name() -> String:
+	var n: String = active_name()
+	return n if n != "" else "Vous"
+
+
+## Enregistre le résultat d'une partie (ou manche) solo pour le joueur actif.
+## `delta` : gain net en jetons ; `points` : total Dutch (-1 si sans objet).
+static func record_active(game_key: String, won: bool, delta: int, points: int = -1) -> void:
+	var id: String = active_id()
+	if id == "":
+		return
+	var e: Dictionary = {"id": id, "rank": 0 if won else 1, "start": 0, "final": delta}
+	if points >= 0:
+		e["points"] = points
+	record_game(game_key, [e] as Array[Dictionary], false)
 
 
 # --- Groupes récents -----------------------------------------------------------
@@ -301,7 +342,10 @@ static func import_replace(d: Dictionary) -> void:
 		"profiles": profiles,
 		"groups": (d.get("groups", []) as Array).duplicate(true),
 		"next_id": maxi(int(d.get("next_id", 1)), max_id + 1),
+		"active": str(d.get("active", "")),
 	}
+	if not exists(str(_data["active"])):
+		_data["active"] = ""
 	_save()
 
 

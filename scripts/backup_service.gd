@@ -96,6 +96,8 @@ static func apply(data: Dictionary, mode: int) -> String:
 	var bank: Node = _node("/root/Bankroll")
 	if bank != null and data.has("bank"):
 		bank.call("load_dict", data["bank"])
+	if bank != null:
+		bank.call("use_profile", ProfileStore.active_id())
 	var stats: Node = _node("/root/Stats")
 	if stats != null and data.has("stats"):
 		stats.call("load_dict", data["stats"])

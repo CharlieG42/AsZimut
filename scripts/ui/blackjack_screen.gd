@@ -181,6 +181,7 @@ func _banner_kind() -> int:
 
 func _on_round_finished(outcome: int, net: int) -> void:
 	Stats.record_blackjack(outcome, net)
+	ProfileStore.record_active("bj", net > 0, net)
 	if engine.has_split and net > 0:
 		Stats.record_split_win()
 	Stats.note_bank(Bankroll.value)

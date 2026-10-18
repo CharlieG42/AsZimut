@@ -197,7 +197,7 @@ static func start_solo_poker(players: int, buy_in: int) -> void:
 	profile_ids = ["", "", "", "", "", ""]
 	solo_buy_in = buy_in
 	chips = buy_in
-	names[0] = "Vous"
+	names[0] = ProfileStore.solo_name()
 	bots[0] = false
 	for i: int in range(1, bots.size()):
 		bots[i] = true

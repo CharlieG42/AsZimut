@@ -51,7 +51,7 @@ func _rebuild() -> void:
 	_content.add_child(bar)
 
 	var intro: Label = UIKit.label(
-		"Les joueurs enregistrés gardent leur progression d'une partie locale à l'autre : statistiques et banque personnelle.",
+		"Les joueurs enregistrés gardent leur progression : statistiques et banque personnelle. Le joueur actif est celui qui joue en solo contre ZIA.",
 		13, UIKit.TEXT_SOFT
 	)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -79,6 +79,15 @@ func _rebuild() -> void:
 	_content.add_child(add_panel)
 	if _error != "":
 		_content.add_child(UIKit.label(_error, 13, UIKit.WARNING_TEXT))
+
+	var guest_active: bool = ProfileStore.active_id() == ""
+	var guest: Button = UIKit.button(
+		"✓ Invité (sans profil) — joueur actif" if guest_active else "Jouer en invité (sans profil)",
+		UIKit.GOLD if guest_active else Color(1, 1, 1, 0.12), UIKit.INK if guest_active else Color.WHITE, 14
+	)
+	guest.custom_minimum_size = Vector2(0, 42)
+	guest.pressed.connect(_activate.bind(""))
+	_content.add_child(guest)
 
 	var all: Array[Dictionary] = ProfileStore.profiles()
 	if all.is_empty():
@@ -137,6 +146,15 @@ func _card(p: Dictionary) -> Control:
 	m.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(m)
 
+	var is_active: bool = ProfileStore.active_id() == id
+	var play: Button = UIKit.button(
+		"✓ Joueur actif en solo" if is_active else "Jouer en solo avec ce profil",
+		UIKit.GOLD if is_active else Color(1, 1, 1, 0.12), UIKit.INK if is_active else Color.WHITE, 14
+	)
+	play.custom_minimum_size = Vector2(0, 42)
+	play.pressed.connect(_activate.bind(id))
+	col.add_child(play)
+
 	var actions: HBoxContainer = HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 6)
 	var rename_btn: Button = UIKit.outline_button("Renommer", Color.WHITE, 13)
@@ -174,7 +192,10 @@ func _add() -> void:
 	if ProfileStore.find_by_name(name) != "":
 		_error = "« %s » existe déjà." % name
 	else:
-		ProfileStore.create(name)
+		var created: String = ProfileStore.create(name)
+		if ProfileStore.active_id() == "":
+			_activate(created)
+			return
 		_new_name = ""
 		_error = ""
 	_rebuild()
@@ -192,6 +213,7 @@ func _rename(text: String, id: String) -> void:
 func _reset_bank(id: String) -> void:
 	if _confirm_bank == id:
 		ProfileStore.set_bank(id, ProfileStore.START_BANK)
+		Bankroll.refresh_profile()
 		_confirm_bank = ""
 	else:
 		_confirm_bank = id
@@ -202,6 +224,7 @@ func _reset_bank(id: String) -> void:
 func _delete(id: String) -> void:
 	if _confirm_delete == id:
 		ProfileStore.remove(id)
+		Bankroll.use_profile(ProfileStore.active_id())
 		for i: int in LocalSession.profile_ids.size():
 			if LocalSession.profile_ids[i] == id:
 				LocalSession.profile_ids[i] = ""
@@ -210,6 +233,17 @@ func _delete(id: String) -> void:
 	else:
 		_confirm_delete = id
 		_confirm_bank = ""
+	_rebuild()
+
+
+## Choisit le joueur actif des parties solo ("" = invité) ; sa banque devient la banque solo.
+func _activate(id: String) -> void:
+	ProfileStore.set_active(id)
+	Bankroll.use_profile(id)
+	_new_name = ""
+	_error = ""
+	_confirm_bank = ""
+	_confirm_delete = ""
 	_rebuild()
 
 

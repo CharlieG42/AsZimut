@@ -65,7 +65,11 @@ Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.jso
 - Chaque joueur garde ses **statistiques** par jeu (parties, victoires, gains, meilleur total au Dutch).
 - Option **« Banques perso »** (blackjack et poker) : chacun joue avec sa banque personnelle et la retrouve
   à la prochaine partie (rechargée à 1000 si elle passe sous 100). Invités et ZIA partent avec la mise choisie.
-- Écran **Joueurs** (depuis la préparation de partie ou Options) : progression, renommer, remettre la banque à 1000, supprimer.
+- Écran **Joueurs** (depuis l'accueil, la préparation de partie ou Options) : progression, renommer, remettre la banque à 1000, supprimer.
+- **Joueur actif en solo** : le bouton « Joueur : … » de l'accueil permet de créer un joueur et de choisir qui joue
+  contre ZIA (ou « invité » sans profil). Le joueur actif donne son nom à la table (Blackjack, Poker, Dutch), sa banque
+  personnelle devient la banque solo (la banque d'invité est conservée à part) et ses résultats solo s'ajoutent à ses
+  statistiques. Le premier joueur créé depuis l'écran Joueurs devient actif ; il est inclus dans la sauvegarde.
 
 ### Sauvegarde : export / import
 Options → **Sauvegarde des données** :

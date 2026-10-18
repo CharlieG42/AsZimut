@@ -425,8 +425,11 @@ func _refresh_result() -> void:
 		if LocalSession.solo_poker:
 			_sync_bank()
 			Stats.note_bank(Bankroll.value)
-			if e.is_game_over() and not e.aborted and e.standings()[0] == 0 and e.seats[0].stack > 0:
-				Stats.record_table_win()
+			if e.is_game_over() and not e.aborted:
+				var table_won: bool = e.standings()[0] == 0 and e.seats[0].stack > 0
+				ProfileStore.record_active("pk", table_won, e.seats[0].stack - LocalSession.chips)
+				if table_won:
+					Stats.record_table_win()
 
 
 func _refresh_hole() -> void:
