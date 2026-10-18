@@ -190,6 +190,7 @@ func _refresh() -> void:
 		_turn_key = key
 		if engine.current >= 0 and not engine.current_is_bot():
 			UIKit.haptic(Stats.haptics, 35)
+			SfxPlayer.play("alert", -6.0)
 			_focus_current.call_deferred()
 
 
@@ -413,6 +414,7 @@ func _open_help(topic: int) -> void:
 
 func _on_round_finished() -> void:
 	UIKit.haptic(Stats.haptics, 80)
+	SfxPlayer.play("chip")
 
 
 func _on_quit_pressed() -> void:

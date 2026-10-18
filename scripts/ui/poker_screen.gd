@@ -253,8 +253,10 @@ func _on_hand_finished(outcome: int, net: int, pot_won: int) -> void:
 	match outcome:
 		PokerEngine.HandOutcome.WIN:
 			UIKit.haptic(Stats.haptics, 60)
+			SfxPlayer.play("win")
 		PokerEngine.HandOutcome.LOSE:
 			UIKit.haptic(Stats.haptics, 140)
+			SfxPlayer.play("lose")
 
 
 func _refresh_log() -> void:

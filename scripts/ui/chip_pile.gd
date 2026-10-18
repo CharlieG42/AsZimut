@@ -17,6 +17,8 @@ func _init(min_width: float = 120.0) -> void:
 func set_amount(value: int) -> void:
 	if value == amount:
 		return
+	if value > amount and is_inside_tree():
+		SfxPlayer.play("chip", -5.0)
 	amount = value
 	queue_redraw()
 

@@ -99,6 +99,13 @@ func _rebuild() -> void:
 	haptic_box.add_theme_font_size_override("font_size", 16)
 	haptic_box.toggled.connect(Stats.set_haptics)
 	cfg.add_child(haptic_box)
+	var sound_box: CheckButton = CheckButton.new()
+	sound_box.text = "Sons"
+	sound_box.button_pressed = Stats.sound
+	sound_box.focus_mode = Control.FOCUS_NONE
+	sound_box.add_theme_font_size_override("font_size", 16)
+	sound_box.toggled.connect(Stats.set_sound)
+	cfg.add_child(sound_box)
 
 	# Aide
 	var help: VBoxContainer = _section("Aide")

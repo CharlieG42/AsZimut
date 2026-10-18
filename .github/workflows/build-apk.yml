@@ -77,7 +77,7 @@ jobs:
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           export KS_FILE="$RUNNER_TEMP/aszimut-release.keystore"
-          export SIGN_LOG=/dev/stdout
+          export SIGN_LOG=/dev/stderr
           bash .github/scripts/signing.sh > "$RUNNER_TEMP/sign.env"
           grep -v '^GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=' "$RUNNER_TEMP/sign.env" | grep -v '^GODOT_ANDROID_KEYSTORE_RELEASE_USER='
           cat "$RUNNER_TEMP/sign.env" >> "$GITHUB_ENV"

@@ -159,6 +159,7 @@ func _refresh() -> void:
 	if key != _last_phase_key:
 		_selected_own = -1
 		_last_phase_key = key
+		_phase_sound()
 	if not _interactive_phase() or engine.current_is_bot():
 		_unlocked_for = -1
 	_title.text = "Dutch · manche %d · jusqu'à %d" % [engine.round_number, engine.target]
@@ -172,6 +173,7 @@ func _refresh() -> void:
 	if needs_cover:
 		if not _cover.visible:
 			UIKit.haptic(Stats.haptics, 45)
+			SfxPlayer.play("alert", -6.0)
 		_cover_name.text = engine.names[engine.current]
 		_cover_info.text = engine.message
 		_cover_button.text = "Je suis %s" % engine.names[engine.current]
@@ -186,6 +188,21 @@ func _refresh() -> void:
 		_build_table()
 	if engine.awaiting_bot() and _bot_timer.is_stopped():
 		_bot_timer.start()
+
+
+func _phase_sound() -> void:
+	match engine.phase:
+		DutchEngine.Phase.ROUND_OVER, DutchEngine.Phase.MATCH_OVER:
+			var human_won: bool = false
+			for w: int in engine.round_winners:
+				if not engine.bots[w]:
+					human_won = true
+			SfxPlayer.play("win" if human_won or _humans().size() > 1 else "lose")
+		_:
+			if engine.dutch_caller >= 0 and engine.turns_left == engine.n - 1 and engine.phase == DutchEngine.Phase.TURN:
+				SfxPlayer.play("alert")
+			else:
+				SfxPlayer.play("card", -4.0)
 
 
 func _build_table() -> void:

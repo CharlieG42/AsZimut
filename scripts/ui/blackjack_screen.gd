@@ -157,8 +157,10 @@ func _on_round_finished(outcome: int, net: int) -> void:
 	match outcome:
 		BlackjackEngine.Outcome.WIN, BlackjackEngine.Outcome.BLACKJACK:
 			UIKit.haptic(Stats.haptics, 60)
+			SfxPlayer.play("win")
 		BlackjackEngine.Outcome.LOSE:
 			UIKit.haptic(Stats.haptics, 140)
+			SfxPlayer.play("lose")
 
 
 func _rebuild_controls() -> void:

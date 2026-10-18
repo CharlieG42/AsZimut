@@ -96,6 +96,7 @@ static func button(text: String, bg: Color, fg: Color = Color.WHITE, size: int =
 	b.add_theme_stylebox_override("hover", box(bg.lightened(0.08), 14))
 	b.add_theme_stylebox_override("pressed", box(bg.darkened(0.18), 14))
 	b.add_theme_stylebox_override("disabled", box(Color(bg.r, bg.g, bg.b, 0.3), 14))
+	b.button_down.connect(_tap_sound)
 	return b
 
 
@@ -116,7 +117,12 @@ static func outline_button(text: String, color: Color = Color.WHITE, size: int =
 	b.add_theme_stylebox_override(
 		"disabled", box(Color(0, 0, 0, 0.1), 14, Color(color.r, color.g, color.b, 0.2), 2)
 	)
+	b.button_down.connect(_tap_sound)
 	return b
+
+
+static func _tap_sound() -> void:
+	SfxPlayer.play("tap", -3.0)
 
 
 ## Pastille de texte (PanelContainer contenant un Label, accessible via chip_label()).

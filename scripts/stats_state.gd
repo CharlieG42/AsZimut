@@ -13,6 +13,7 @@ var persist: bool = true
 # Réglages
 var difficulty: int = 1  # niveau de ZIA : 0 facile, 1 normal, 2 difficile
 var haptics: bool = true
+var sound: bool = true
 ## Mode débutant : conseils pendant la partie.
 var beginner: bool = false
 ## Affiche le tutoriel au démarrage de l'application.
@@ -87,6 +88,11 @@ func set_haptics(enabled: bool) -> void:
 	_commit()
 
 
+func set_sound(enabled: bool) -> void:
+	sound = enabled
+	_commit()
+
+
 func set_beginner(enabled: bool) -> void:
 	beginner = enabled
 	_commit()
@@ -124,6 +130,7 @@ func _load() -> void:
 		return
 	difficulty = clampi(int(cfg.get_value("settings", "difficulty", 1)), 0, PokerEngine.PROFILES.size() - 1)
 	haptics = bool(cfg.get_value("settings", "haptics", true))
+	sound = bool(cfg.get_value("settings", "sound", true))
 	beginner = bool(cfg.get_value("settings", "beginner", false))
 	show_tutorial = bool(cfg.get_value("settings", "show_tutorial", true))
 	for key: String in _STAT_KEYS:
@@ -137,6 +144,7 @@ func _save() -> void:
 	var cfg: ConfigFile = ConfigFile.new()
 	cfg.set_value("settings", "difficulty", difficulty)
 	cfg.set_value("settings", "haptics", haptics)
+	cfg.set_value("settings", "sound", sound)
 	cfg.set_value("settings", "beginner", beginner)
 	cfg.set_value("settings", "show_tutorial", show_tutorial)
 	for key: String in _STAT_KEYS:

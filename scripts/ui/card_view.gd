@@ -73,6 +73,7 @@ func _kill_tween() -> void:
 
 
 func _pop_in() -> void:
+	SfxPlayer.play("card", -4.0)
 	_kill_tween()
 	scale = Vector2(0.6, 0.6)
 	modulate.a = 0.0
@@ -85,6 +86,7 @@ func _pop_in() -> void:
 
 
 func _flip() -> void:
+	SfxPlayer.play("card", -6.0)
 	_kill_tween()
 	_tween = create_tween()
 	_tween.tween_property(self, "scale:x", 0.0, 0.12)

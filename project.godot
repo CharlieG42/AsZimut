@@ -22,6 +22,7 @@ config/icon="res://icon.svg"
 
 Bankroll="*res://scripts/bankroll_state.gd"
 Stats="*res://scripts/stats_state.gd"
+Sfx="*res://scripts/sfx_player.gd"
 
 [display]
 

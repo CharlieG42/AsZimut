@@ -34,6 +34,7 @@ func _init(chip_value: int = 10) -> void:
 	resized.connect(func() -> void: pivot_offset = size / 2.0)
 	button_down.connect(_press_feedback.bind(0.9))
 	button_up.connect(_press_feedback.bind(1.0))
+	pressed.connect(func() -> void: SfxPlayer.play("chip"))
 
 
 func _notification(what: int) -> void:

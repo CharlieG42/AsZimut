@@ -268,6 +268,7 @@ func _refresh() -> void:
 		_cover_name.text = e.seats[e.to_act].name
 		_cover_button.text = "Je suis %s" % e.seats[e.to_act].name
 		UIKit.haptic(Stats.haptics, 45)
+		SfxPlayer.play("alert", -6.0)
 	elif needs_cover:
 		_cover_name.text = e.seats[e.to_act].name
 		_cover_button.text = "Je suis %s" % e.seats[e.to_act].name
@@ -394,6 +395,7 @@ func _refresh_result() -> void:
 	if key != _result_key:
 		_result_key = key
 		UIKit.pop(_result_panel)
+		SfxPlayer.play("chip")
 
 
 func _refresh_hole() -> void:
