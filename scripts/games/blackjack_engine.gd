@@ -75,6 +75,7 @@ func deal() -> void:
 	if phase != Phase.BET or bet < MIN_BET or bet > _bankroll.value:
 		return
 	_bankroll.add(-bet)
+	_bankroll.set_pending(bet)
 	if deck.size() < 15:
 		deck = Cards.shuffled_deck(rng)
 	player = [deck.pop_back(), deck.pop_back()]
@@ -118,6 +119,7 @@ func take_insurance() -> void:
 		return
 	insurance = insurance_cost()
 	_bankroll.add(-insurance)
+	_bankroll.set_pending(total_staked())
 	_after_insurance()
 
 
@@ -172,6 +174,7 @@ func split() -> void:
 	split_hand = [player.pop_back()]
 	player.append(deck.pop_back())
 	split_hand.append(deck.pop_back())
+	_bankroll.set_pending(total_staked())
 	active_hand = 0
 	message = "Main 1 sur 2."
 	if Cards.rank_of(split_hand[0]) == 14:
@@ -230,11 +233,13 @@ func double_down() -> void:
 			split_bet *= 2
 		else:
 			bet *= 2
+		_bankroll.set_pending(total_staked())
 		current_hand().append(deck.pop_back())
 		_next_hand()
 		return
 	_bankroll.add(-bet)
 	bet *= 2
+	_bankroll.set_pending(total_staked())
 	player.append(deck.pop_back())
 	var v: int = bj_value(player)
 	if v > 21:
@@ -284,8 +289,11 @@ func _finish(result: Outcome, payout: int, text: String) -> void:
 	outcome = result
 	message = text
 	net = payout - total_staked()
+	_bankroll.pending = 0
 	if payout > 0:
 		_bankroll.add(payout)
+	else:
+		_bankroll.set_pending(0)
 	phase = Phase.DONE
 
 

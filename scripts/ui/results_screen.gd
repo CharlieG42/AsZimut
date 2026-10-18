@@ -21,7 +21,10 @@ func _ready() -> void:
 
 	col.add_child(UIKit.spacer(16))
 	col.add_child(UIKit.label("Classement", 38, UIKit.GOLD, true))
-	col.add_child(UIKit.label(LocalSession.title(LocalSession.game), 15, UIKit.TEXT_SOFT))
+	var subtitle: String = LocalSession.title(LocalSession.game)
+	if LocalSession.solo_poker:
+		subtitle += " · table solo"
+	col.add_child(UIKit.label(subtitle, 15, UIKit.TEXT_SOFT))
 	col.add_child(UIKit.spacer(8))
 
 	var rows: Array[Dictionary] = LocalSession.results
@@ -32,9 +35,13 @@ func _ready() -> void:
 	var again: Button = UIKit.button("Rejouer avec les mêmes joueurs", UIKit.GOLD, UIKit.INK, 18)
 	again.pressed.connect(_change.bind(LocalSession.scene(LocalSession.game)))
 	col.add_child(again)
-	var edit: Button = UIKit.outline_button("Modifier la partie", Color.WHITE, 16)
-	edit.pressed.connect(_change.bind(LocalSession.SETUP_SCENE))
-	col.add_child(edit)
+	if LocalSession.solo_poker:
+		again.text = "Rejouer une table (cave %d)" % mini(LocalSession.solo_buy_in, _bank())
+		again.disabled = _bank() < PokerLobby.TABLE_MIN_BANK
+	if not LocalSession.solo and not LocalSession.solo_poker:
+		var edit: Button = UIKit.outline_button("Modifier la partie", Color.WHITE, 16)
+		edit.pressed.connect(_change.bind(LocalSession.SETUP_SCENE))
+		col.add_child(edit)
 	var home: Button = UIKit.outline_button("Accueil", UIKit.TEXT_SOFT, 16)
 	home.pressed.connect(_change.bind(LocalSession.HOME_SCENE))
 	col.add_child(home)
@@ -79,6 +86,11 @@ func _row(index: int, data: Dictionary) -> Control:
 	right.add_child(UIKit.label(UIKit.signed(delta), 13, delta_color))
 	row.add_child(right)
 	return panel
+
+
+func _bank() -> int:
+	var b: Node = get_node_or_null("/root/Bankroll")
+	return int(b.get("value")) if b != null else 0
 
 
 func _change(scene_path: String) -> void:

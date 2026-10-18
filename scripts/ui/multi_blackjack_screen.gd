@@ -19,6 +19,7 @@ var _controls: VBoxContainer
 var _dealer_timer: Timer
 var _turn_key: int = -999
 var _bot_timer: Timer
+var _saved_round: int = -1
 
 
 func _ready() -> void:
@@ -72,6 +73,9 @@ func _ready() -> void:
 	col.add_child(_controls)
 
 	_refresh()
+	if not LocalSession.resume_data.is_empty() and LocalSession.game == LocalSession.Game.BLACKJACK:
+		engine.restore(LocalSession.resume_data)
+	LocalSession.resume_data = {}
 	UIKit.fade_in(self)
 
 
@@ -160,6 +164,7 @@ func _build_seat(i: int) -> Control:
 
 
 func _refresh() -> void:
+	_autosave()
 	_quit_armed = false
 	_quit_button.text = "‹ Terminer"
 	var round_number: int = engine.rounds + (0 if engine.phase == MultiBlackjackEngine.Phase.DONE else 1)
@@ -425,7 +430,21 @@ func _on_quit_pressed() -> void:
 		_quit_button.text = "Confirmer ?"
 
 
+## Sauvegarde au début des mises de chaque manche (reprise si l'appli est fermée).
+func _autosave() -> void:
+	if engine.phase != MultiBlackjackEngine.Phase.BET or engine.is_game_over():
+		return
+	for s: MultiBlackjackEngine.Seat in engine.seats:
+		if s.ready:
+			return
+	if engine.rounds == _saved_round:
+		return
+	_saved_round = engine.rounds
+	GameSave.save(engine.snapshot())
+
+
 func _show_results() -> void:
+	GameSave.clear()
 	var rows: Array[Dictionary] = []
 	for i: int in engine.standings():
 		var s: MultiBlackjackEngine.Seat = engine.seats[i]

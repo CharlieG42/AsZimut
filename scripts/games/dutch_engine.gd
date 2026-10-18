@@ -70,6 +70,24 @@ func setup(player_names: Array[String], bot_flags: Array[bool], level: int = 1, 
 	start_round()
 
 
+## Instantané pris en début de manche (pour reprendre la partie à cette manche).
+func snapshot() -> Dictionary:
+	return {
+		"totals": Array(totals), "round_number": round_number, "starter": starter, "target": target,
+	}
+
+
+## Restaure les scores et redistribue la manche sauvegardée.
+func restore(snap: Dictionary) -> void:
+	var saved: Array = snap.get("totals", [])
+	for p: int in mini(n, saved.size()):
+		totals[p] = int(saved[p])
+	target = int(snap.get("target", target))
+	round_number = int(snap.get("round_number", 1)) - 1
+	starter = (int(snap.get("starter", 0)) - 1 + n) % n
+	start_round()
+
+
 # --- Valeurs -----------------------------------------------------------------
 
 

@@ -12,10 +12,14 @@
 
 ### Blackjack
 - Croupier IA : tire jusqu'à 17, s'arrête sur un soft 17.
-- Blackjack payé **3:2**, **double** autorisé sur les deux premières cartes.
+- Blackjack payé **3:2**, **double** autorisé sur les deux premières cartes (aussi après un split).
+- **Split** d'une paire en deux mains (une fois ; As séparés = une carte chacun), **assurance** quand le croupier montre un As (moitié de la mise, payée 2:1), conseils de stratégie de base pour les deux.
+- Si l'appli est fermée en pleine manche, la mise est rendue au lancement suivant.
 - Mise par jetons de casino (10 / 25 / 50 / 100) avec pile de mise, banque commune de 1000 rechargeable.
 
-### Poker Texas Hold'em (heads-up)
+### Poker Texas Hold'em (face-à-face ou table solo)
+La tuile Poker propose le **face-à-face contre ZIA** ou une **table à 4 ou 6** (3 ou 5 ZIA, cave de 1000 max prise sur la banque, blinds croissantes ; la banque suit votre pile pendant la partie).
+
 - Adversaire : **ZIA**. Blinds 10/20, donneur alterné, relances plafonnées à 3 par street.
 - Gestion complète des tapis : runout du board, remboursement du trop-versé non couvert.
 - Cave minimale 20 ; ZIA se recave automatiquement à 500.
@@ -53,12 +57,21 @@ La partie est indépendante de la banque et des statistiques solo.
 - Décisions par **cote du pot**, avec bluffs occasionnels et calls flottants.
 - **3 niveaux** réglables (Facile / Normal / Difficile) : nombre de simulations, bluff, seuils et bruit de jugement.
 
+### Reprise de partie
+Les parties longues (multijoueur local, Dutch, table de poker solo) sont **sauvegardées au début de chaque main ou manche**.
+Si Android ferme l'appli, l'accueil propose « ▶ Reprendre » : la main / manche en cours redémarre avec les piles
+(ou scores) du moment où elle a commencé. « ✕ » abandonne la sauvegarde.
+
+### Sons
+Sons de cartes, de jetons, de boutons et de fin de manche **synthétisés en code** (aucun fichier audio) ;
+désactivables dans Options (« Sons »).
+
 ### Banque
 La banque est commune aux deux jeux et **sauvegardée sur l'appareil** (`user://aszimut.cfg`), avec le **record** de banque.
 
 ### Statistiques et réglages
 Écran « Options & statistiques » : parties, victoires, gains nets, plus gros pot, niveau de ZIA (aussi pour les bots),
-vibrations, mode débutant, tutoriel, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
+vibrations, sons, mode débutant, tutoriel, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
 
 ## Structure
 
@@ -157,7 +170,9 @@ Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.
 
 ## Roadmap
 
-- [ ] Sons et effets (distribution, jetons)
+- [x] Sons (cartes, jetons, résultats)
+- [ ] Animations de distribution et de jetons
+- [ ] Statistiques Dutch, succès, courbe de la banque
 - [ ] Plus de jeux (une future table de modules à la façon Sebae)
 
 ---

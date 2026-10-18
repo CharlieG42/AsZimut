@@ -75,6 +75,31 @@ func _ready() -> void:
 
 	col.add_child(UIKit.spacer(0))
 
+	if Bankroll.refunded > 0:
+		var refund: Label = UIKit.label(
+			"Mise de blackjack rendue : +%d (l'appli a été fermée en pleine manche)." % Bankroll.refunded,
+			12, UIKit.GREEN_ACTION
+		)
+		refund.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(refund)
+		Bankroll.refunded = 0
+
+	var save: Dictionary = GameSave.load_save()
+	if not save.is_empty():
+		var resume_row: HBoxContainer = HBoxContainer.new()
+		resume_row.add_theme_constant_override("separation", 8)
+		var resume: Button = UIKit.button("▶  " + GameSave.describe(save), UIKit.GOLD, UIKit.INK, 15)
+		resume.custom_minimum_size = Vector2(0, 48)
+		resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		resume.clip_text = true
+		resume.pressed.connect(_resume.bind(save))
+		resume_row.add_child(resume)
+		var drop: Button = UIKit.outline_button("✕", UIKit.TEXT_SOFT, 18)
+		drop.custom_minimum_size = Vector2(48, 48)
+		drop.pressed.connect(_drop_save.bind(resume_row))
+		resume_row.add_child(drop)
+		col.add_child(resume_row)
+
 	var bj_icons: Array[int] = [Cards.make(14, Cards.Suit.SPADES), Cards.make(13, Cards.Suit.HEARTS)]
 	var blackjack_card: GameCard = GameCard.new(
 		"Blackjack", "Battez le croupier — blackjack payé 3:2, double autorisé.", bj_icons
@@ -84,9 +109,9 @@ func _ready() -> void:
 
 	var poker_icons: Array[int] = [Cards.make(14, Cards.Suit.HEARTS), Cards.make(14, Cards.Suit.DIAMONDS)]
 	_poker_card = GameCard.new(
-		"Poker Hold'em", "Heads-up contre ZIA (Monte-Carlo + Chen), blinds 10/20.", poker_icons
+		"Poker Hold'em", "Face-à-face ou table jusqu'à 6, contre ZIA (Monte-Carlo + Chen).", poker_icons
 	)
-	_poker_card.pressed.connect(_open.bind(POKER_SCENE))
+	_poker_card.pressed.connect(_open_poker_lobby)
 	col.add_child(_poker_card)
 
 	_poker_hint = UIKit.label(
@@ -125,7 +150,22 @@ func _ready() -> void:
 	UIKit.fade_in(self)
 
 
+func _open_poker_lobby() -> void:
+	PokerLobby.open(self)
+
+
+func _resume(save: Dictionary) -> void:
+	GameSave.apply(save)
+	_open(LocalSession.scene(LocalSession.game))
+
+
+func _drop_save(row: Control) -> void:
+	GameSave.clear()
+	row.queue_free()
+
+
 func _start_solo_dutch() -> void:
+	GameSave.clear()
 	LocalSession.start_solo_dutch()
 	_open(LocalSession.scene(LocalSession.Game.DUTCH))
 

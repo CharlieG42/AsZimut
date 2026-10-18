@@ -6,6 +6,7 @@ var _content: VBoxContainer
 
 func _ready() -> void:
 	LocalSession.solo = false
+	LocalSession.solo_poker = false
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

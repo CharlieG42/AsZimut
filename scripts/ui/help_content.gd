@@ -126,6 +126,11 @@ static func app_sections() -> Array[Dictionary]:
 			"Jouez à 2 à 6 sur un seul appareil, hors ligne (Dutch : 2 à 5). Au poker et au Dutch, un écran « Passez l'appareil » cache les cartes entre deux tours. Chaque siège peut aussi être confié à l'IA (ZIA).",
 		},
 		{
+			"title": "Reprendre une partie",
+			"text":
+			"Les parties locales, le Dutch et la table de poker solo sont sauvegardés à chaque main. Si l'appli se ferme, l'accueil propose « Reprendre ».",
+		},
+		{
 			"title": "Aide et conseils",
 			"text":
 			"Le bouton « ? » en haut de chaque partie rappelle les règles. Le mode débutant affiche un conseil à chaque décision : action recommandée et raison.",

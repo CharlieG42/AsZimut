@@ -38,9 +38,12 @@ var _advice_text: String = ""
 var _unlocked_for: int = -1
 var _raise_to: int = 0
 var _result_key: String = ""
+var _saved_hand: int = -1
 
 
 func _ready() -> void:
+	if LocalSession.solo_poker and LocalSession.resume_data.is_empty():
+		LocalSession.chips = mini(LocalSession.solo_buy_in, Bankroll.value)
 	engine = PokerTableEngine.new(
 		LocalSession.player_names(), LocalSession.chips, LocalSession.bot_flags(), Stats.difficulty
 	)
@@ -97,7 +100,20 @@ func _ready() -> void:
 	col.add_child(_log_panel)
 
 	_build_cover()
-	engine.start_hand()
+	if LocalSession.solo_poker and LocalSession.resume_data.is_empty():
+		LocalSession.solo_outside = Bankroll.value - LocalSession.chips
+	if not LocalSession.resume_data.is_empty() and LocalSession.game == LocalSession.Game.POKER:
+		var snap: Dictionary = LocalSession.resume_data
+		if LocalSession.solo_poker:
+			# La banque contient déjà les jetons du joueur : sa pile repart de là.
+			var stacks: Array = snap.get("stacks", [])
+			if not stacks.is_empty():
+				stacks[0] = maxi(0, Bankroll.value - LocalSession.solo_outside)
+		LocalSession.resume_data = {}
+		engine.restore(snap)
+	else:
+		LocalSession.resume_data = {}
+		engine.start_hand()
 	UIKit.fade_in(self)
 
 
@@ -113,7 +129,7 @@ func _build_top_bar() -> Control:
 
 	var mid: VBoxContainer = VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mid.add_child(UIKit.label("Poker · local", 20, UIKit.GOLD, true))
+	mid.add_child(UIKit.label("Poker · table solo" if LocalSession.solo_poker else "Poker · local", 20, UIKit.GOLD, true))
 	_blinds_label = UIKit.label("", 12, UIKit.TEXT_SOFT)
 	mid.add_child(_blinds_label)
 	bar.add_child(mid)
@@ -256,13 +272,20 @@ func _build_cover() -> void:
 
 func _refresh() -> void:
 	var e: PokerTableEngine = engine
+	_sync_bank()
+	if e.hand_number != _saved_hand and not e.hand_over and not e.is_game_over():
+		_saved_hand = e.hand_number
+		GameSave.save(e.snapshot())
 	_quit_armed = false
 	_quit_button.text = "‹ Terminer"
 
 	if e.hand_over or e.runout or not e.can_act() or e.current_is_bot():
 		_unlocked_for = -1
+	elif LocalSession.human_count() == 1:
+		_unlocked_for = e.to_act  # un seul humain : pas besoin de cacher l'écran
 	var needs_cover: bool = (
 		e.can_act() and not e.runout and not e.current_is_bot() and _unlocked_for != e.to_act
+		and LocalSession.human_count() > 1
 	)
 	if needs_cover and not _cover.visible:
 		_cover_name.text = e.seats[e.to_act].name
@@ -310,7 +333,7 @@ func _refresh_turn() -> void:
 	elif e.current_is_bot():
 		text = "%s réfléchit…" % e.seats[e.to_act].name
 	elif e.can_act():
-		text = "Au tour de %s" % e.seats[e.to_act].name
+		text = "À vous de jouer" if LocalSession.human_count() == 1 and not e.current_is_bot() else "Au tour de %s" % e.seats[e.to_act].name
 	if text != _turn_label.text:
 		_turn_label.text = text
 		if text != "":
@@ -405,7 +428,7 @@ func _refresh_hole() -> void:
 	if not show:
 		return
 	var s: PokerTableEngine.Seat = e.seats[e.to_act]
-	_hole_title.text = "Vos cartes, %s" % s.name
+	_hole_title.text = "Vos cartes" if LocalSession.human_count() == 1 else "Vos cartes, %s" % s.name
 	_hole_row.set_cards(s.hole)
 	var d: String = e.describe_hand(e.to_act)
 	_hint.visible = d != ""
@@ -591,9 +614,17 @@ func _on_quit_pressed() -> void:
 		_quit_button.text = "Confirmer ?"
 
 
+## Poker solo à la table : la banque suit la pile du joueur (comme au face-à-face).
+func _sync_bank() -> void:
+	if LocalSession.solo_poker:
+		Bankroll.set_to(LocalSession.solo_outside + engine.seats[0].stack)
+
+
 func _show_results() -> void:
+	GameSave.clear()
 	if not engine.hand_over or not engine.is_game_over():
 		engine.abort()  # rend les mises en cours
+	_sync_bank()
 	var rows: Array[Dictionary] = []
 	for i: int in engine.standings():
 		var s: PokerTableEngine.Seat = engine.seats[i]

@@ -316,6 +316,8 @@ func _open_help(topic: int) -> void:
 
 
 func _go_home() -> void:
+	# Quitter en pleine manche l'abandonne (la mise reste perdue).
+	Bankroll.set_pending(0)
 	get_tree().change_scene_to_file(HOME_SCENE)
 
 

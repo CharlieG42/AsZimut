@@ -14,6 +14,13 @@ static var game: int = Game.POKER
 ## Dutch : score qui met fin à la partie, et mode « 1 joueur contre ZIA » lancé depuis l'accueil.
 static var dutch_target: int = 50
 static var solo: bool = false
+## Poker solo à la table : un humain (banque personnelle) contre plusieurs ZIA.
+static var solo_poker: bool = false
+static var solo_buy_in: int = 0
+## Banque hors table pendant le poker solo (banque = hors table + pile du joueur).
+static var solo_outside: int = 0
+## Instantané à restaurer au lancement de l'écran de jeu (reprise de partie), vide sinon.
+static var resume_data: Dictionary = {}
 static var count: int = 2
 static var chips: int = 1000
 static var names: Array[String] = ["", "", "", "", "", ""]
@@ -103,3 +110,21 @@ static func start_solo_dutch() -> void:
 	game = Game.DUTCH
 	count = 2
 	solo = true
+	solo_poker = false
+	resume_data = {}
+
+
+## Poker solo à la table : `players` sièges dont un seul humain (siège 0), cave prise sur la banque.
+static func start_solo_poker(players: int, buy_in: int) -> void:
+	game = Game.POKER
+	count = clampi(players, 2, PokerTableEngine.MAX_PLAYERS)
+	solo = false
+	solo_poker = true
+	solo_buy_in = buy_in
+	chips = buy_in
+	names[0] = "Vous"
+	bots[0] = false
+	for i: int in range(1, bots.size()):
+		bots[i] = true
+		names[i] = ""
+	resume_data = {}

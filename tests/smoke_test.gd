@@ -43,6 +43,8 @@ func _press(scene: Node, text: String) -> bool:
 
 
 func _run() -> void:
+	GameSave.path = "user://test_resume.json"
+	GameSave.clear()
 	var bank: BankrollState = root.get_node_or_null("Bankroll") as BankrollState
 	_check(bank != null, "autoload Bankroll présent")
 	if bank == null:
@@ -70,6 +72,8 @@ func _run() -> void:
 	await _test_bots_ui(stats)
 	await _test_dutch_ui(stats)
 	await _test_about()
+	await _test_solo_table_and_resume(bank)
+	GameSave.clear()
 
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
@@ -824,3 +828,81 @@ func _find_label_text(node: Node, text: String) -> bool:
 		if _find_label_text(child, text):
 			return true
 	return false
+
+
+func _test_solo_table_and_resume(bank: BankrollState) -> void:
+	# Poker solo à une table de 4 : banque synchronisée, pas d'écran de passage.
+	GameSave.clear()
+	bank.set_to(1500)
+	var home: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	(home.get("_poker_card") as GameCard).pressed.emit()
+	await _frames(2)
+	_check(home.get_node_or_null("PokerLobby") != null, "accueil : choix de la table de poker")
+	_check(_find_button(home, "Table à 6 · 5 ZIA") != null, "lobby : table à 6")
+	_press(home, "Annuler")
+	await _frames(1)
+	_check(home.get_node_or_null("PokerLobby") == null, "lobby : annuler")
+	_unmount(home)
+
+	LocalSession.start_solo_poker(4, 1000)
+	var pk: Node = _mount("res://scenes/multi_poker.tscn")
+	await _frames(3)
+	var e: PokerTableEngine = pk.get("engine") as PokerTableEngine
+	_check(e.seats.size() == 4 and not e.seats[0].is_bot and e.seats[1].is_bot and e.seats[3].is_bot, "table solo : 1 humain + 3 ZIA")
+	_check(e.seats[0].name == "Vous", "table solo : siège « Vous »")
+	pk.get("_bot_timer").wait_time = 0.02
+	pk.get("_runout_timer").wait_time = 0.02
+	_check(GameSave.has_save(), "table solo : sauvegarde au début de la main")
+	var hands: int = 0
+	var covers: int = 0
+	var budget: int = 3000
+	while hands < 4 and budget > 0 and not e.is_game_over():
+		budget -= 1
+		await _frames(1)
+		if (pk.get("_cover") as Control).visible:
+			covers += 1
+		if e.hand_over:
+			hands += 1
+			_press(pk, "Main suivante")
+			continue
+		if e.current_is_bot() or not e.can_act():
+			continue
+		if not _press(pk, "Checker"):
+			if not _press(pk, "Suivre"):
+				_press(pk, "Coucher")
+	_check(covers == 0, "table solo : jamais d'écran de passage")
+	_check(hands >= 4 or e.is_game_over(), "table solo : 4 mains jouées (%d)" % hands)
+	_check(bank.value == 500 + e.seats[0].stack, "table solo : banque = hors table + pile (%d / %d)" % [bank.value, 500 + e.seats[0].stack])
+	_check(_press(pk, "‹ Terminer") and _press(pk, "Confirmer ?"), "table solo : terminer")
+	await _frames(3)
+	_check(not GameSave.has_save(), "table solo : sauvegarde effacée en fin de partie")
+	_unmount(pk)
+	LocalSession.solo_poker = false
+
+	# Reprise d'une partie de Dutch : on quitte sans terminer, puis on reprend depuis l'accueil.
+	LocalSession.start_solo_dutch()
+	var du: Node = _mount("res://scenes/dutch.tscn")
+	await _frames(3)
+	var de: DutchEngine = du.get("engine") as DutchEngine
+	de.totals = [9, 21]
+	de.start_round()
+	await _frames(1)
+	_unmount(du)
+	var save: Dictionary = GameSave.load_save()
+	_check(not save.is_empty() and int(save["game"]) == LocalSession.Game.DUTCH, "Dutch : partie sauvegardée")
+	var home2: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	_check(_find_button_prefix(home2, "▶  Reprendre : Dutch") != null, "accueil : bouton Reprendre")
+	_unmount(home2)
+	LocalSession.solo = false
+	GameSave.apply(save)
+	_check(LocalSession.solo and LocalSession.game == LocalSession.Game.DUTCH, "reprise : session restaurée")
+	var du2: Node = _mount("res://scenes/dutch.tscn")
+	await _frames(3)
+	var de2: DutchEngine = du2.get("engine") as DutchEngine
+	_check(de2.totals == [9, 21] and de2.round_number == de.round_number, "reprise Dutch : scores et manche (%s)" % str(de2.totals))
+	_check(LocalSession.resume_data.is_empty(), "reprise consommée")
+	_unmount(du2)
+	GameSave.clear()
+	LocalSession.solo = false

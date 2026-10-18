@@ -21,6 +21,7 @@ var _unlocked_for: int = -1
 ## Carte à soi choisie pour l'échange aveugle (-1 si aucune).
 var _selected_own: int = -1
 var _last_phase_key: String = ""
+var _saved_round: int = -1
 
 
 func _ready() -> void:
@@ -62,6 +63,9 @@ func _ready() -> void:
 	engine.target = LocalSession.dutch_target
 	engine.changed.connect(_refresh)
 	engine.setup(names, flags, Stats.difficulty)
+	if not LocalSession.resume_data.is_empty() and LocalSession.game == LocalSession.Game.DUTCH:
+		engine.restore(LocalSession.resume_data)
+	LocalSession.resume_data = {}
 
 
 func _build_top_bar() -> Control:
@@ -153,6 +157,9 @@ func _acting_human() -> bool:
 
 
 func _refresh() -> void:
+	if engine.phase == DutchEngine.Phase.TURN and engine.round_number != _saved_round and engine.current == engine.starter:
+		_saved_round = engine.round_number
+		GameSave.save(engine.snapshot())
 	_quit_armed = false
 	_quit_button.text = "‹ Terminer"
 	var key: String = "%d/%d/%d" % [engine.round_number, engine.current, engine.phase]
@@ -529,6 +536,7 @@ func _on_quit_pressed() -> void:
 
 
 func _show_results() -> void:
+	GameSave.clear()
 	var rows: Array[Dictionary] = []
 	for r: Dictionary in engine.ranking():
 		rows.append({"name": r["name"], "stack": r["score"], "start": 0, "unit": "pts"})

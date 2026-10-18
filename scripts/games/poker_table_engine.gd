@@ -61,6 +61,8 @@ var level: int = 1
 var has_humans: bool = false
 
 var _eliminated: int = 0
+## Donneur avant la main en cours (pour rejouer cette main à la reprise).
+var _button_before: int = -1
 
 
 func _init(names: Array[String], chips: int, bots: Array[bool] = [], bot_level: int = 1) -> void:
@@ -267,6 +269,7 @@ func start_hand() -> void:
 	if is_game_over() or alive_count() < MIN_PLAYERS:
 		return
 	hand_number += 1
+	_button_before = button
 	deck = Cards.shuffled_deck(rng)
 	board = []
 	result_lines = []
@@ -624,3 +627,36 @@ func _close_hand() -> void:
 	hand_over = true
 	changed.emit()
 	hand_finished.emit()
+
+
+## Instantané pris au début d'une main (piles avant les blinds).
+func snapshot() -> Dictionary:
+	var stacks: Array = []
+	var outs: Array = []
+	var ranks: Array = []
+	for s: Seat in seats:
+		stacks.append(s.start_stack if not s.out else s.stack)
+		outs.append(s.out)
+		ranks.append(s.out_rank)
+	return {
+		"stacks": stacks, "out": outs, "ranks": ranks, "hand_number": hand_number,
+		"button": _button_before, "eliminated": _eliminated,
+	}
+
+
+## Reprend la partie : rejoue la main sauvegardée avec les piles du début de cette main.
+func restore(snap: Dictionary) -> void:
+	var stacks: Array = snap.get("stacks", [])
+	var outs: Array = snap.get("out", [])
+	var ranks: Array = snap.get("ranks", [])
+	for i: int in mini(seats.size(), stacks.size()):
+		seats[i].stack = int(stacks[i])
+		seats[i].out = bool(outs[i]) if i < outs.size() else false
+		seats[i].out_rank = int(ranks[i]) if i < ranks.size() else 0
+	_eliminated = int(snap.get("eliminated", 0))
+	hand_number = int(snap.get("hand_number", 1)) - 1
+	button = int(snap.get("button", -1))
+	total_chips = 0
+	for s: Seat in seats:
+		total_chips += s.stack
+	start_hand()

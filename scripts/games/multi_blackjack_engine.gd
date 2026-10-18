@@ -303,3 +303,30 @@ func _settle(s: Seat, dv: int, d_nat: bool) -> void:
 		payout = s.bet
 	s.stack += payout
 	s.net = payout - s.bet
+
+
+## Instantané pris au début des mises (aucune mise encore prélevée).
+func snapshot() -> Dictionary:
+	var stacks: Array = []
+	for s: Seat in seats:
+		stacks.append(s.stack + (s.bet if s.ready else 0))
+	return {"stacks": stacks, "rounds": rounds}
+
+
+func restore(snap: Dictionary) -> void:
+	var stacks: Array = snap.get("stacks", [])
+	for i: int in mini(seats.size(), stacks.size()):
+		var s: Seat = seats[i]
+		s.stack = int(stacks[i])
+		s.bet = 0
+		s.ready = false
+		s.hand = []
+		s.done = false
+		s.out = s.stack < MIN_BET
+		s.result = BlackjackEngine.Outcome.NONE
+	rounds = int(snap.get("rounds", 0))
+	dealer = []
+	revealed = false
+	phase = Phase.BET
+	current = _next_bettor(-1)
+	changed.emit()

@@ -27,6 +27,8 @@ func _initialize() -> void:
 	_test_bots()
 	_test_dutch()
 	_test_blackjack_split_insurance()
+	_test_snapshots()
+	_test_pending_refund()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1026,3 +1028,89 @@ func _test_blackjack_split_insurance() -> void:
 	var i3: BlackjackEngine = _bj_rigged([Cards.make(10, C), Cards.make(9, H)], [Cards.make(14, C), Cards.make(12, H)], [])
 	i3.decline_insurance()
 	_check(i3.outcome == BlackjackEngine.Outcome.LOSE and i3.net == -100, "sans assurance : blackjack du croupier, mise perdue")
+
+
+func _test_snapshots() -> void:
+	# Dutch : scores et manche restaurés
+	var d: DutchEngine = _dutch(3, 11)
+	d.totals = [12, 30, 7]
+	d.round_number = 4
+	d.start_round()
+	var snap: Dictionary = d.snapshot()
+	var d2: DutchEngine = _dutch(3, 12)
+	d2.restore(JSON.parse_string(JSON.stringify(snap)))
+	_check(d2.totals == [12, 30, 7] and d2.round_number == 5 and d2.starter == d.starter, "reprise Dutch : scores, manche et premier joueur")
+	_check(d2.phase == DutchEngine.Phase.TURN and d2.hands[0].size() == 4, "reprise Dutch : nouvelle donne")
+
+	# Poker à la table : piles du début de main, main et donneur
+	var names: Array[String] = _names(4)
+	var t: PokerTableEngine = PokerTableEngine.new(names, 500)
+	t.rng.seed = 3
+	t.start_hand()
+	t.seats[2].stack = 0
+	t.seats[2].out = true
+	var total_before: int = 0
+	for s: PokerTableEngine.Seat in t.seats:
+		total_before += s.stack + s.total
+	t.start_hand()
+	var ps: Dictionary = JSON.parse_string(JSON.stringify(t.snapshot()))
+	var button: int = t.button
+	var t2: PokerTableEngine = PokerTableEngine.new(names, 500)
+	t2.restore(ps)
+	_check(t2.hand_number == t.hand_number and t2.button == button, "reprise poker : même main et même donneur")
+	var same: bool = true
+	for i: int in 4:
+		if t2.seats[i].start_stack != t.seats[i].start_stack or t2.seats[i].out != t.seats[i].out:
+			same = false
+	_check(same, "reprise poker : piles d'avant les blinds et éliminés")
+
+	# Blackjack local
+	var b: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(3), 800)
+	b.seats[1].stack = 350
+	b.rounds = 6
+	var b2: MultiBlackjackEngine = MultiBlackjackEngine.new(_names(3), 800)
+	b2.restore(JSON.parse_string(JSON.stringify(b.snapshot())))
+	_check(b2.seats[1].stack == 350 and b2.rounds == 6 and b2.phase == MultiBlackjackEngine.Phase.BET, "reprise blackjack local")
+
+
+func _test_pending_refund() -> void:
+	var path: String = "user://test_bank.cfg"
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	var e: BlackjackEngine = BlackjackEngine.new(bank)
+	e.add_to_bet(100)
+	e.deal()
+	if e.phase == BlackjackEngine.Phase.INSURANCE:
+		e.decline_insurance()
+	if e.phase == BlackjackEngine.Phase.DONE:
+		_check(bank.pending == 0, "mise en cours : effacée en fin de manche immédiate")
+	else:
+		_check(bank.pending == 100, "mise en cours mémorisée (%d)" % bank.pending)
+		if e.can_double():
+			e.double_down()
+			if e.phase != BlackjackEngine.Phase.DONE:
+				_check(bank.pending == 200, "mise en cours après double")
+		if e.phase == BlackjackEngine.Phase.DEALER:
+			e.dealer_plays()
+		e.stand()
+		if e.phase == BlackjackEngine.Phase.DEALER:
+			e.dealer_plays()
+		_check(bank.pending == 0, "mise en cours effacée après la manche")
+	# Rechargement : une mise en suspens est rendue.
+	var cfg: ConfigFile = ConfigFile.new()
+	cfg.set_value("bank", "value", 400)
+	cfg.set_value("bank", "best", 1000)
+	cfg.set_value("bank", "pending", 150)
+	cfg.save(path)
+	var reloaded: BankrollState = BankrollState.new()
+	reloaded.save_path = path
+	reloaded._load()
+	_check(reloaded.value == 550 and reloaded.refunded == 150 and reloaded.pending == 0, "mise en suspens rendue au lancement (%d)" % reloaded.value)
+	var again: BankrollState = BankrollState.new()
+	again.save_path = path
+	again._load()
+	_check(again.value == 550 and again.refunded == 0, "remboursement une seule fois")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	reloaded.free()
+	again.free()
