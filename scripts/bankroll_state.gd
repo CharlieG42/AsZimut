@@ -42,6 +42,17 @@ func set_pending(amount: int) -> void:
 	_save()
 
 
+func to_dict() -> Dictionary:
+	return {"value": value, "best": best}
+
+
+func load_dict(d: Dictionary) -> void:
+	value = maxi(0, int(d.get("value", START_VALUE)))
+	best = maxi(value, int(d.get("best", value)))
+	pending = 0
+	_commit()
+
+
 func reset() -> void:
 	set_to(START_VALUE)
 

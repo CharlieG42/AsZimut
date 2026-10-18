@@ -67,6 +67,15 @@ Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.jso
   à la prochaine partie (rechargée à 1000 si elle passe sous 100). Invités et ZIA partent avec la mise choisie.
 - Écran **Joueurs** (depuis la préparation de partie ou Options) : progression, renommer, remettre la banque à 1000, supprimer.
 
+### Sauvegarde : export / import
+Options → **Sauvegarde des données** :
+- **Exporter** : « Copier le code de sauvegarde » met dans le presse-papiers un code compact (`AZSAVE1:…`, JSON compressé)
+  contenant banque, statistiques, succès, réglages et joueurs enregistrés. À coller dans une note, un mail, un message…
+  Si le téléphone propose le sélecteur de fichiers natif, « Enregistrer dans un fichier… » produit aussi un `.json`.
+- **Importer** : coller le code (le texte autour et les retours à la ligne sont tolérés), « Lire le code » montre un résumé, puis
+  **Remplacer toutes mes données** (nouveau téléphone, avec confirmation) ou **Ajouter seulement les joueurs** (fusion des carnets
+  de deux appareils : un joueur déjà présent garde sa version jouée le plus récemment ; banque et stats inchangées).
+
 ### Reprise de partie
 Les parties longues (multijoueur local, Dutch, table de poker solo) sont **sauvegardées au début de chaque main ou manche**.
 Si Android ferme l'appli, l'accueil propose « ▶ Reprendre » : la main / manche en cours redémarre avec les piles

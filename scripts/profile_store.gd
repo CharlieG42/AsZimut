@@ -274,3 +274,82 @@ static func summary(id: String) -> Array[String]:
 	if lines.is_empty():
 		lines.append("Pas encore de partie terminée.")
 	return lines
+
+
+# --- Export / import -----------------------------------------------------------
+
+
+static func export_data() -> Dictionary:
+	_ensure()
+	return _data.duplicate(true)
+
+
+static func _valid_profile(p: Variant) -> bool:
+	return p is Dictionary and (p as Dictionary).has("id") and str((p as Dictionary).get("name", "")).strip_edges() != ""
+
+
+## Remplace tout le carnet par celui importé.
+static func import_replace(d: Dictionary) -> void:
+	_ensure()
+	var profiles: Array = []
+	var max_id: int = 0
+	for p: Variant in d.get("profiles", []):
+		if _valid_profile(p):
+			profiles.append((p as Dictionary).duplicate(true))
+			max_id = maxi(max_id, str((p as Dictionary)["id"]).trim_prefix("p").to_int())
+	_data = {
+		"profiles": profiles,
+		"groups": (d.get("groups", []) as Array).duplicate(true),
+		"next_id": maxi(int(d.get("next_id", 1)), max_id + 1),
+	}
+	_save()
+
+
+## Ajoute les joueurs importés : un joueur déjà présent (même nom) garde la version jouée le plus récemment.
+## Renvoie [ajoutés, mis à jour].
+static func import_merge(d: Dictionary) -> Array[int]:
+	_ensure()
+	var added: int = 0
+	var updated: int = 0
+	var id_map: Dictionary = {}
+	for p: Variant in d.get("profiles", []):
+		if not _valid_profile(p):
+			continue
+		var incoming: Dictionary = (p as Dictionary).duplicate(true)
+		var old_id: String = str(incoming["id"])
+		var mine: String = find_by_name(str(incoming["name"]))
+		if mine == "":
+			var new_id: String = "p%d" % int(_data["next_id"])
+			_data["next_id"] = int(_data["next_id"]) + 1
+			incoming["id"] = new_id
+			(_data["profiles"] as Array).append(incoming)
+			id_map[old_id] = new_id
+			added += 1
+		else:
+			id_map[old_id] = mine
+			var current: Dictionary = get_profile(mine)
+			if int(incoming.get("last_played", 0)) > int(current.get("last_played", 0)):
+				for k: Variant in incoming.keys():
+					if str(k) != "id" and str(k) != "name":
+						current[k] = incoming[k]
+				updated += 1
+	# Groupes : on reprend ceux de l'autre appareil, avec les identifiants d'ici.
+	for g: Variant in d.get("groups", []):
+		var ids: Array[String] = []
+		for id: Variant in g:
+			if id_map.has(str(id)):
+				ids.append(str(id_map[str(id)]))
+		if ids.size() >= 2:
+			var groups: Array = _data["groups"]
+			var key: Array = ids.duplicate()
+			key.sort()
+			var dup: bool = false
+			for other: Variant in groups:
+				var o: Array = (other as Array).duplicate()
+				o.sort()
+				if o == key:
+					dup = true
+			if not dup and groups.size() < MAX_GROUPS:
+				groups.append(ids)
+	_save()
+	return [added, updated]

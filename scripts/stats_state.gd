@@ -215,6 +215,43 @@ func set_show_tutorial(enabled: bool) -> void:
 	_commit()
 
 
+## Données sauvegardables (export / import).
+func to_dict() -> Dictionary:
+	var stats: Dictionary = {}
+	for key: String in _STAT_KEYS:
+		stats[key] = get(key)
+	return {
+		"settings": {
+			"difficulty": difficulty, "haptics": haptics, "sound": sound,
+			"beginner": beginner, "show_tutorial": show_tutorial,
+		},
+		"stats": stats,
+		"du_best_hand": du_best_hand,
+		"achievements": Array(achievements),
+		"bank_history": Array(bank_history),
+	}
+
+
+func load_dict(d: Dictionary) -> void:
+	var st: Dictionary = d.get("settings", {})
+	difficulty = clampi(int(st.get("difficulty", difficulty)), 0, PokerEngine.PROFILES.size() - 1)
+	haptics = bool(st.get("haptics", haptics))
+	sound = bool(st.get("sound", sound))
+	beginner = bool(st.get("beginner", beginner))
+	show_tutorial = bool(st.get("show_tutorial", show_tutorial))
+	var stats: Dictionary = d.get("stats", {})
+	for key: String in _STAT_KEYS:
+		set(key, int(stats.get(key, 0)))
+	du_best_hand = int(d.get("du_best_hand", 99))
+	achievements = []
+	for id: Variant in d.get("achievements", []):
+		achievements.append(str(id))
+	bank_history = []
+	for v: Variant in d.get("bank_history", []):
+		bank_history.append(int(v))
+	_commit()
+
+
 ## Efface les statistiques (les réglages sont conservés).
 func reset_stats() -> void:
 	for key: String in _STAT_KEYS:

@@ -97,6 +97,13 @@ func _rebuild() -> void:
 	)
 	players.add_child(pl)
 
+	# Sauvegarde
+	var backup: VBoxContainer = _section("Sauvegarde des données")
+	var bk: Button = UIKit.outline_button("Exporter / importer", UIKit.GOLD, 16)
+	bk.custom_minimum_size = Vector2(0, 48)
+	bk.pressed.connect(func() -> void: get_tree().change_scene_to_file(BackupScreen.SCENE))
+	backup.add_child(bk)
+
 	# Réglages
 	var cfg: VBoxContainer = _section("Réglages")
 	cfg.add_child(UIKit.label("Niveau de ZIA", 14, UIKit.TEXT_SOFT))

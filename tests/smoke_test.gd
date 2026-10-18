@@ -79,6 +79,7 @@ func _run() -> void:
 	await _test_solo_table_and_resume(bank)
 	await _test_achievements(stats, bank)
 	await _test_profiles_ui()
+	await _test_backup(stats, bank)
 	GameSave.clear()
 
 	print("")
@@ -1015,4 +1016,81 @@ func _test_profiles_ui() -> void:
 	_unmount(res)
 	LocalSession.use_banks = false
 	LocalSession.profile_ids = ["", "", "", "", "", ""]
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+
+
+func _test_backup(stats: StatsState, bank: BankrollState) -> void:
+	ProfileStore.path = "user://test_backup_profiles.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
+	var ana: String = ProfileStore.create("Ana")
+	ProfileStore.set_bank(ana, 1800)
+	ProfileStore.create("Tom")
+	ProfileStore.note_group([ana, ProfileStore.find_by_name("Tom")] as Array[String])
+	bank.set_to(4321)
+	stats.reset_stats()
+	stats.bj_rounds = 7
+	stats.achievements = ["bj_first"]
+	stats.sound = false
+	var code: String = BackupService.to_code(BackupService.build())
+	_check(code.begins_with(BackupService.PREFIX), "export : code de sauvegarde")
+	_check(code.length() < 6000, "export : code compact (%d caractères)" % code.length())
+
+	# Tout change, puis on restaure
+	bank.set_to(10)
+	stats.reset_stats()
+	stats.sound = true
+	ProfileStore.remove(ana)
+	var wrapped: String = "Ma sauvegarde :\n" + code.substr(0, 40) + "\n" + code.substr(40) + "\n"
+	var data: Dictionary = BackupService.parse(wrapped)
+	_check(not data.has("error"), "import : code retrouvé malgré du texte et des retours à la ligne")
+	_check(BackupService.describe(data).contains("Joueurs enregistrés : 2 (Ana, Tom)"), "import : résumé")
+	BackupService.apply(data, BackupService.Mode.REPLACE)
+	_check(bank.value == 4321 and stats.bj_rounds == 7 and not stats.sound, "import : banque, stats et réglages restaurés")
+	_check(stats.has_achievement("bj_first") and ProfileStore.bank_of(ProfileStore.find_by_name("Ana")) == 1800, "import : succès et joueurs restaurés")
+	_check(ProfileStore.recent_groups().size() == 1, "import : groupes restaurés")
+
+	# Erreurs
+	_check(BackupService.parse("").has("error"), "import : vide refusé")
+	_check(BackupService.parse("bonjour").has("error"), "import : texte quelconque refusé")
+	_check(BackupService.parse(code.substr(0, code.length() / 2)).has("error"), "import : code coupé refusé")
+	_check(BackupService.parse(BackupService.to_json(BackupService.build())).has("format"), "import : fichier JSON accepté")
+
+	# Fusion : un autre appareil avec Ana (jouée plus récemment) et Zed
+	var other: Dictionary = BackupService.build()
+	var profiles: Array = other["profiles"]["profiles"]
+	for p: Variant in profiles:
+		var d: Dictionary = p
+		if str(d["name"]) == "Ana":
+			d["bank"] = 5000
+			d["last_played"] = int(Time.get_unix_time_from_system()) + 100
+	profiles.append({"id": "p99", "name": "Zed", "bank": 1200, "last_played": 5, "stats": {}})
+	bank.set_to(777)
+	var msg: String = BackupService.apply(BackupService.parse(BackupService.to_code(other)), BackupService.Mode.MERGE_PLAYERS)
+	_check(ProfileStore.exists(ProfileStore.find_by_name("Zed")) and ProfileStore.bank_of(ProfileStore.find_by_name("Ana")) == 5000, "fusion : joueur ajouté et profil plus récent repris")
+	_check(ProfileStore.count() == 3 and bank.value == 777, "fusion : pas de doublon, banque inchangée (%s)" % msg)
+
+	# Écran
+	var screen: Node = _mount("res://scenes/backup.tscn")
+	await _frames(2)
+	_check(_press(screen, "Copier le code de sauvegarde"), "écran sauvegarde : copier")
+	await _frames(1)
+	var box: TextEdit = screen.get("_code_box") as TextEdit
+	_check(box.visible and box.text.begins_with(BackupService.PREFIX), "écran sauvegarde : code affiché")
+	(screen.get("_import_box") as TextEdit).text = box.text
+	_check(_press(screen, "Lire le code"), "écran sauvegarde : lire")
+	await _frames(1)
+	_check((screen.get("_preview_panel") as Control).visible, "écran sauvegarde : aperçu")
+	_check(_press(screen, "Remplacer toutes mes données") and _press(screen, "Confirmer : tout remplacer ?"), "écran sauvegarde : remplacement confirmé")
+	await _frames(1)
+	_check(not (screen.get("_preview_panel") as Control).visible, "écran sauvegarde : import terminé")
+	(screen.get("_import_box") as TextEdit).text = "n'importe quoi"
+	_press(screen, "Lire le code")
+	await _frames(1)
+	_check(not (screen.get("_preview_panel") as Control).visible and (screen.get("_status") as Label).visible, "écran sauvegarde : erreur affichée")
+	_unmount(screen)
+	stats.reset_stats()
+	stats.sound = true
+	bank.set_to(1000)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
