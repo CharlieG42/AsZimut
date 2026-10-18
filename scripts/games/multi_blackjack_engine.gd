@@ -330,3 +330,9 @@ func restore(snap: Dictionary) -> void:
 	phase = Phase.BET
 	current = _next_bettor(-1)
 	changed.emit()
+
+
+## Piles de départ propres à chaque siège (banques personnelles des joueurs enregistrés).
+func set_stacks(stacks: Array[int]) -> void:
+	for i: int in mini(seats.size(), stacks.size()):
+		seats[i].stack = stacks[i]

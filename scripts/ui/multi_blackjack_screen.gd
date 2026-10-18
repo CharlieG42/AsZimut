@@ -26,6 +26,9 @@ func _ready() -> void:
 	engine = MultiBlackjackEngine.new(
 		LocalSession.player_names(), LocalSession.chips, LocalSession.bot_flags(), Stats.difficulty
 	)
+	if LocalSession.resume_data.is_empty():
+		LocalSession.compute_start_stacks()
+	engine.set_stacks(LocalSession.start_stacks)
 	engine.changed.connect(_refresh)
 	engine.round_finished.connect(_on_round_finished)
 
@@ -452,7 +455,7 @@ func _show_results() -> void:
 		var stack: int = s.stack
 		if s.ready and engine.phase != MultiBlackjackEngine.Phase.DONE:
 			stack += s.bet
-		rows.append({"name": s.name, "stack": stack, "start": LocalSession.chips})
+		rows.append({"name": s.name, "stack": stack, "start": LocalSession.start_for_name(s.name)})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["stack"]) > int(b["stack"]))
 	LocalSession.store_results(rows)
 	get_tree().change_scene_to_file(LocalSession.RESULTS_SCENE)

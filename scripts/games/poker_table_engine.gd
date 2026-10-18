@@ -660,3 +660,12 @@ func restore(snap: Dictionary) -> void:
 	for s: Seat in seats:
 		total_chips += s.stack
 	start_hand()
+
+
+## Piles de départ propres à chaque siège (banques personnelles des joueurs enregistrés).
+func set_stacks(stacks: Array[int]) -> void:
+	for i: int in mini(seats.size(), stacks.size()):
+		seats[i].stack = stacks[i]
+	total_chips = 0
+	for s: Seat in seats:
+		total_chips += s.stack

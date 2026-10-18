@@ -87,6 +87,16 @@ func _rebuild() -> void:
 	for a: Array in StatsState.ACHIEVEMENTS:
 		ach.add_child(_achievement_row(a, Stats.has_achievement(str(a[0]))))
 
+	# Joueurs enregistrés
+	var players: VBoxContainer = _section("Joueurs enregistrés · %d" % ProfileStore.count())
+	var pl: Button = UIKit.outline_button("Voir la progression des joueurs", UIKit.GOLD, 16)
+	pl.custom_minimum_size = Vector2(0, 48)
+	pl.pressed.connect(func() -> void:
+		ProfilesScreen.return_scene = "res://scenes/stats.tscn"
+		get_tree().change_scene_to_file(ProfilesScreen.SCENE)
+	)
+	players.add_child(pl)
+
 	# Réglages
 	var cfg: VBoxContainer = _section("Réglages")
 	cfg.add_child(UIKit.label("Niveau de ZIA", 14, UIKit.TEXT_SOFT))

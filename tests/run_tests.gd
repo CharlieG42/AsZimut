@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_test_blackjack_split_insurance()
 	_test_snapshots()
 	_test_pending_refund()
+	_test_profiles()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1114,3 +1115,79 @@ func _test_pending_refund() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	reloaded.free()
 	again.free()
+
+
+func _test_profiles() -> void:
+	ProfileStore.path = "user://test_profiles.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
+	var ana: String = ProfileStore.create("Ana")
+	var ben: String = ProfileStore.create(" Ben ")
+	var leo: String = ProfileStore.create("Léo")
+	_check(ana != "" and ben != "" and ProfileStore.count() == 3, "profils créés")
+	_check(ProfileStore.create("ana") == ana, "même nom (casse ignorée) : même profil")
+	_check(ProfileStore.name_of(ben) == "Ben", "nom nettoyé")
+	_check(not ProfileStore.rename(ben, "Ana") and ProfileStore.rename(ben, "Benji"), "renommer : refuse un doublon")
+	_check(ProfileStore.bank_of(ana) == ProfileStore.START_BANK, "banque perso de départ")
+
+	# Groupes récents
+	var g1: Array[String] = [ana, ben]
+	var g2: Array[String] = [ana, leo]
+	ProfileStore.note_group(g1)
+	ProfileStore.note_group(g2)
+	ProfileStore.note_group([ben, ana] as Array[String])
+	var groups: Array[Array] = ProfileStore.recent_groups()
+	_check(groups.size() == 2 and groups[0].has(ana) and groups[0].has(ben), "groupes récents : sans doublon, le plus récent en tête")
+
+	# Résultats enregistrés
+	var entries: Array[Dictionary] = [
+		{"id": ana, "rank": 0, "start": 1000, "final": 1600},
+		{"id": ben, "rank": 1, "start": 1000, "final": 400},
+	]
+	ProfileStore.record_game("pk", entries, true)
+	_check(ProfileStore.bank_of(ana) == 1600 and ProfileStore.bank_of(ben) == 400, "banques perso mises à jour")
+	var pk: Dictionary = ProfileStore.get_profile(ana)["stats"]["pk"]
+	_check(int(pk["games"]) == 1 and int(pk["wins"]) == 1 and int(pk["net"]) == 600, "stats poker du profil")
+	ProfileStore.record_game("du", [{"id": leo, "rank": 0, "points": 12}] as Array[Dictionary], false)
+	ProfileStore.record_game("du", [{"id": leo, "rank": 2, "points": 30}] as Array[Dictionary], false)
+	var du: Dictionary = ProfileStore.get_profile(leo)["stats"]["du"]
+	_check(int(du["games"]) == 2 and int(du["wins"]) == 1 and int(du["best"]) == 12, "stats Dutch du profil")
+	_check(ProfileStore.profiles()[0]["id"] in [ana, ben, leo], "profils triés par date")
+
+	# Persistance
+	ProfileStore.reload()
+	_check(ProfileStore.count() == 3 and ProfileStore.bank_of(ana) == 1600, "profils relus depuis le disque")
+	ProfileStore.set_bank(ben, 40)
+	_check(ProfileStore.playable_bank(ben) == ProfileStore.START_BANK, "banque presque vide : rechargée pour jouer")
+
+	# Session locale : liaison, piles de départ, enregistrement des résultats
+	LocalSession.game = LocalSession.Game.POKER
+	LocalSession.solo = false
+	LocalSession.solo_poker = false
+	LocalSession.count = 4
+	LocalSession.names = ["", "Zoé", "", "", "", ""]
+	LocalSession.bots = [false, false, true, false, false, false]
+	LocalSession.profile_ids = [ana, "", "", "", "", ""]
+	LocalSession.use_banks = true
+	LocalSession.chips = 500
+	LocalSession.save_new_profiles = true
+	LocalSession.prepare_start()
+	var zoe: String = ProfileStore.find_by_name("Zoé")
+	_check(zoe != "" and LocalSession.profile_ids[1] == zoe, "nouveau nom enregistré au lancement")
+	_check(LocalSession.start_stacks == [1600, 1000, 500, 500], "piles de départ : banques perso, invités et ZIA (%s)" % str(LocalSession.start_stacks))
+	var names: Array[String] = LocalSession.player_names()
+	var rows: Array[Dictionary] = [
+		{"name": names[1], "stack": 2500, "start": 1000},
+		{"name": names[0], "stack": 1100, "start": 1600},
+		{"name": names[2], "stack": 0, "start": 500},
+		{"name": names[3], "stack": 0, "start": 500},
+	]
+	LocalSession.store_results(rows)
+	_check(ProfileStore.bank_of(zoe) == 2500 and ProfileStore.bank_of(ana) == 1100, "fin de partie : banques perso enregistrées")
+	_check(int(ProfileStore.get_profile(zoe)["stats"]["pk"]["wins"]) == 1, "fin de partie : victoire comptée")
+	ProfileStore.remove(ben)
+	_check(not ProfileStore.exists(ben) and ProfileStore.recent_groups().size() >= 1, "suppression d'un profil")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	LocalSession.use_banks = false
+	LocalSession.profile_ids = ["", "", "", "", "", ""]

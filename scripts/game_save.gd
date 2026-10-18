@@ -19,6 +19,9 @@ static func save(data: Dictionary) -> void:
 		"dutch_target": LocalSession.dutch_target,
 		"names": Array(LocalSession.names),
 		"bots": Array(LocalSession.bots),
+		"profile_ids": Array(LocalSession.profile_ids),
+		"use_banks": LocalSession.use_banks,
+		"start_stacks": Array(LocalSession.start_stacks),
 		"data": data,
 		"saved_at": int(Time.get_unix_time_from_system()),
 	}
@@ -60,6 +63,15 @@ static func apply(payload: Dictionary) -> void:
 		LocalSession.names[i] = str(names[i])
 	for i: int in mini(bots.size(), LocalSession.bots.size()):
 		LocalSession.bots[i] = bool(bots[i])
+	var pids: Array = payload.get("profile_ids", [])
+	for i: int in LocalSession.profile_ids.size():
+		LocalSession.profile_ids[i] = str(pids[i]) if i < pids.size() else ""
+	LocalSession.use_banks = bool(payload.get("use_banks", false))
+	LocalSession.start_stacks = []
+	for v: Variant in payload.get("start_stacks", []):
+		LocalSession.start_stacks.append(int(v))
+	if LocalSession.start_stacks.size() != LocalSession.count:
+		LocalSession.compute_start_stacks()
 	LocalSession.resume_data = payload.get("data", {})
 
 

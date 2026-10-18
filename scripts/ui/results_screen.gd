@@ -31,6 +31,20 @@ func _ready() -> void:
 	for i: int in rows.size():
 		col.add_child(_row(i, rows[i]))
 
+	var saved: Array[String] = []
+	if not LocalSession.solo and not LocalSession.solo_poker:
+		for i: int in LocalSession.count:
+			if not LocalSession.bots[i] and ProfileStore.exists(LocalSession.profile_ids[i]):
+				var pid: String = LocalSession.profile_ids[i]
+				var text: String = ProfileStore.name_of(pid)
+				if LocalSession.uses_personal_banks():
+					text += " (banque %d)" % ProfileStore.bank_of(pid)
+				saved.append(text)
+	if not saved.is_empty():
+		var note: Label = UIKit.label("Progression enregistrée : " + ", ".join(saved), 13, UIKit.GREEN_ACTION)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(note)
+
 	col.add_child(UIKit.spacer(10))
 	var again: Button = UIKit.button("Rejouer avec les mêmes joueurs", UIKit.GOLD, UIKit.INK, 18)
 	again.pressed.connect(_change.bind(LocalSession.scene(LocalSession.game)))

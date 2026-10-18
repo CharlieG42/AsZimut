@@ -47,6 +47,9 @@ func _ready() -> void:
 	engine = PokerTableEngine.new(
 		LocalSession.player_names(), LocalSession.chips, LocalSession.bot_flags(), Stats.difficulty
 	)
+	if LocalSession.resume_data.is_empty():
+		LocalSession.compute_start_stacks()
+	engine.set_stacks(LocalSession.start_stacks)
 	engine.changed.connect(_refresh)
 
 	_runout_timer = Timer.new()
@@ -633,7 +636,7 @@ func _show_results() -> void:
 	var rows: Array[Dictionary] = []
 	for i: int in engine.standings():
 		var s: PokerTableEngine.Seat = engine.seats[i]
-		rows.append({"name": s.name, "stack": s.stack, "start": LocalSession.chips})
+		rows.append({"name": s.name, "stack": s.stack, "start": LocalSession.start_for_name(s.name)})
 	if engine.aborted:
 		rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["stack"]) > int(b["stack"]))
 	LocalSession.store_results(rows)

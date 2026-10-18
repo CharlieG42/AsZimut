@@ -57,6 +57,16 @@ La partie est indépendante de la banque et des statistiques solo.
 - Décisions par **cote du pot**, avec bluffs occasionnels et calls flottants.
 - **3 niveaux** réglables (Facile / Normal / Difficile) : nombre de simulations, bluff, seuils et bruit de jugement.
 
+### Joueurs enregistrés (progression d'une rencontre à l'autre)
+Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.json`) :
+- En préparant une partie locale, les nouveaux noms sont **enregistrés** (case cochée par défaut).
+- **Groupes récents** (« Papa · Lou · Tom », « Julie · Marc · Sophie ») : un appui replace tout le groupe à table.
+  On peut aussi toucher un joueur du carnet pour l'ajouter ou le retirer.
+- Chaque joueur garde ses **statistiques** par jeu (parties, victoires, gains, meilleur total au Dutch).
+- Option **« Banques perso »** (blackjack et poker) : chacun joue avec sa banque personnelle et la retrouve
+  à la prochaine partie (rechargée à 1000 si elle passe sous 100). Invités et ZIA partent avec la mise choisie.
+- Écran **Joueurs** (depuis la préparation de partie ou Options) : progression, renommer, remettre la banque à 1000, supprimer.
+
 ### Reprise de partie
 Les parties longues (multijoueur local, Dutch, table de poker solo) sont **sauvegardées au début de chaque main ou manche**.
 Si Android ferme l'appli, l'accueil propose « ▶ Reprendre » : la main / manche en cours redémarre avec les piles

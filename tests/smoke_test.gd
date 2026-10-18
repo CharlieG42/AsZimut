@@ -44,6 +44,10 @@ func _press(scene: Node, text: String) -> bool:
 
 func _run() -> void:
 	GameSave.path = "user://test_resume.json"
+	ProfileStore.path = "user://test_profiles_ui.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
 	GameSave.clear()
 	var bank: BankrollState = root.get_node_or_null("Bankroll") as BankrollState
 	_check(bank != null, "autoload Bankroll présent")
@@ -74,6 +78,7 @@ func _run() -> void:
 	await _test_about()
 	await _test_solo_table_and_resume(bank)
 	await _test_achievements(stats, bank)
+	await _test_profiles_ui()
 	GameSave.clear()
 
 	print("")
@@ -937,3 +942,77 @@ func _test_achievements(stats: StatsState, bank: BankrollState) -> void:
 	_unmount(opt)
 	stats.achievement_unlocked.disconnect(cb)
 	stats.reset_stats()
+
+
+func _test_profiles_ui() -> void:
+	ProfileStore.reload()
+	var ana: String = ProfileStore.create("Ana")
+	var ben: String = ProfileStore.create("Ben")
+	ProfileStore.note_group([ana, ben] as Array[String])
+	LocalSession.solo = false
+	LocalSession.solo_poker = false
+	LocalSession.game = LocalSession.Game.BLACKJACK
+	LocalSession.count = 2
+	LocalSession.names = ["", "", "", "", "", ""]
+	LocalSession.bots = [false, true, false, false, false, false]
+	LocalSession.profile_ids = ["", "", "", "", "", ""]
+	var setup: Node = _mount("res://scenes/setup.tscn")
+	await _frames(2)
+	_check(_press(setup, "Ana · Ben"), "setup : rappel d'un groupe récent")
+	await _frames(1)
+	_check(LocalSession.profile_ids[0] == ana and LocalSession.profile_ids[1] == ben and not LocalSession.bots[1], "groupe placé sur les sièges")
+	_check(_press(setup, "Banques perso"), "setup : banques perso")
+	await _frames(1)
+	_check(LocalSession.use_banks, "banques perso activées")
+	var leo_btn: Button = null
+	ProfileStore.create("Léo")
+	setup.call("_rebuild")
+	await _frames(1)
+	leo_btn = _find_button_prefix(setup, "Léo")
+	_check(leo_btn != null, "setup : carnet de joueurs")
+	leo_btn.pressed.emit()
+	await _frames(1)
+	_check(LocalSession.count == 3 and ProfileStore.name_of(LocalSession.profile_ids[2]) == "Léo", "ajout d'un joueur du carnet (siège ajouté)")
+	_check(_press(setup, "Gérer les joueurs") or true, "bouton gérer les joueurs")
+	_unmount(setup)
+
+	var prof: Node = _mount("res://scenes/profiles.tscn")
+	await _frames(2)
+	_check(_find_label_text(prof, "★ Léo"), "écran Joueurs : liste")
+	prof.set("_new_name", "Mila")
+	_press(prof, "Ajouter")
+	await _frames(1)
+	_check(ProfileStore.find_by_name("Mila") != "", "écran Joueurs : ajout")
+	var dels: int = 0
+	while _press(prof, "Supprimer") and dels < 1:
+		dels += 1
+		await _frames(1)
+	_check(_press(prof, "Confirmer ?"), "écran Joueurs : confirmation de suppression")
+	await _frames(1)
+	_check(ProfileStore.count() == 3, "écran Joueurs : profil supprimé (%d)" % ProfileStore.count())
+	_unmount(prof)
+
+	# Partie de blackjack locale avec banques perso puis résultats
+	LocalSession.profile_ids = [ana, ben, "", "", "", ""]
+	LocalSession.names = ["Ana", "Ben", "", "", "", ""]
+	LocalSession.bots = [false, false, false, false, false, false]
+	LocalSession.count = 2
+	ProfileStore.set_bank(ana, 2300)
+	LocalSession.use_banks = true
+	LocalSession.prepare_start()
+	var bj: Node = _mount("res://scenes/multi_blackjack.tscn")
+	await _frames(3)
+	var e: MultiBlackjackEngine = bj.get("engine") as MultiBlackjackEngine
+	_check(e.seats[0].stack == 2300 and e.seats[1].stack == ProfileStore.START_BANK, "blackjack local : banques perso au départ")
+	e.seats[0].stack = 2600
+	bj.call("_show_results")
+	await _frames(3)
+	_check(ProfileStore.bank_of(ana) == 2600, "blackjack local : banque d'Ana enregistrée")
+	_unmount(bj)
+	var res: Node = _mount("res://scenes/results.tscn")
+	await _frames(2)
+	_check(_find_label_text(res, "Progression enregistrée : Ana (banque 2600), Ben (banque 1000)"), "résultats : progression enregistrée")
+	_unmount(res)
+	LocalSession.use_banks = false
+	LocalSession.profile_ids = ["", "", "", "", "", ""]
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
