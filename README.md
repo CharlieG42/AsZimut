@@ -49,6 +49,9 @@ La partie est indépendante de la banque et des statistiques solo.
 ### Aide, mode débutant et tutoriel
 - **Tutoriel au lancement** : 6 pages (règles du blackjack, du poker et de Dutch, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
 - **Bouton « ? »** dans chaque partie : rappel des règles (et du classement des mains au poker).
+- **Écran Options** en trois onglets sous un en-tête fixe : **Réglages**, **Statistiques** (banque, courbe, stats par jeu) et **Succès**.
+  Défilement tactile maison (`TouchScroll`) : on fait glisser la page en partant de n'importe où, même d'un bouton
+  (qui n'est alors pas activé), avec élan au lâcher ; la position est conservée quand un réglage change.
 - **Mode débutant** (Options, aide en jeu ou fin de tutoriel) : un bandeau « Conseil » explique la meilleure décision : stratégie de base au blackjack (tirer, rester, doubler et pourquoi), force de la main et cote du pot au poker.
 
 ### IA (ZIA)
@@ -73,7 +76,7 @@ Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.jso
   En multijoueur local, le joueur actif est placé d'office au premier siège (retirable d'un appui).
 
 ### Sauvegarde : export / import
-Options → **Sauvegarde des données** :
+Options → Réglages → **Sauvegarde des données** :
 - **Exporter** : « Copier le code de sauvegarde » met dans le presse-papiers un code compact (`AZSAVE1:…`, JSON compressé)
   contenant banque, statistiques, succès, réglages et joueurs enregistrés. À coller dans une note, un mail, un message…
   Si le téléphone propose le sélecteur de fichiers natif, « Enregistrer dans un fichier… » produit aussi un `.json`.

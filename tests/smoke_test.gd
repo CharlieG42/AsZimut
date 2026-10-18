@@ -124,9 +124,14 @@ func _test_stats(stats: StatsState) -> void:
 
 	var screen: Node = _mount("res://scenes/stats.tscn")
 	await _frames(3)
+	_press(screen, "Réglages")
+	await _frames(2)
 	_check(_press(screen, "Difficile"), "choix du niveau Difficile")
 	await _frames(2)
 	_check(stats.difficulty == 2, "difficulté enregistrée")
+	_check(_find_button(screen, "Réinitialiser les stats") == null, "Options : stats dans un autre onglet")
+	_check(_press(screen, "Statistiques"), "Options : onglet Statistiques")
+	await _frames(2)
 	_check(_find_button(screen, "Confirmer l'effacement ?") == null, "pas de confirmation au départ")
 	_check(_press(screen, "Réinitialiser les stats"), "bouton réinitialiser")
 	await _frames(2)
@@ -135,8 +140,88 @@ func _test_stats(stats: StatsState) -> void:
 	await _frames(2)
 	_check(stats.bj_rounds == 0 and stats.pk_hands == 0, "stats effacées")
 	_check(stats.difficulty == 2, "réglages conservés après effacement")
+	await _test_options_scroll(screen)
 	stats.set_difficulty(1)
 	await _unmount(screen)
+
+
+func _mouse(vp: Viewport, pos: Vector2, pressed: bool) -> void:
+	var e: InputEventMouseButton = InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = pressed
+	e.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	e.position = pos
+	e.global_position = pos
+	vp.push_input(e, true)
+
+
+func _mouse_move(vp: Viewport, pos: Vector2) -> void:
+	var m: InputEventMouseMotion = InputEventMouseMotion.new()
+	m.button_mask = MOUSE_BUTTON_MASK_LEFT
+	m.position = pos
+	m.global_position = pos
+	vp.push_input(m, true)
+
+
+## Défilement tactile de l'écran Options : glisser depuis un cadre ou un bouton, appui, élan.
+func _test_options_scroll(screen: Node) -> void:
+	var vp: Viewport = screen.get_viewport()
+	var scroll: TouchScroll = screen.get("_scroll") as TouchScroll
+	scroll.jump_to(0)
+	await _frames(3)
+	var max_scroll: float = scroll.get_v_scroll_bar().max_value - scroll.get_v_scroll_bar().page
+	_check(max_scroll > 60, "Options : onglet Statistiques défilable (%d px)" % int(max_scroll))
+	var rect: Rect2 = scroll.get_global_rect()
+
+	# Glisser en partant d'un cadre (banque) : la page suit le doigt.
+	var p: Vector2 = rect.position + Vector2(rect.size.x * 0.5, 180)
+	_mouse(vp, p, true)
+	for i: int in range(1, 6):
+		_mouse_move(vp, p - Vector2(0, 12 * i))
+	_mouse(vp, p - Vector2(0, 60), false)
+	await _frames(2)
+	_check(scroll.scroll_vertical >= 40, "Options : glisser depuis un cadre fait défiler (%d)" % scroll.scroll_vertical)
+
+	# Glisser en partant d'un bouton : défile, sans activer le bouton.
+	scroll.jump_to(int(max_scroll))
+	await _frames(2)
+	var reset: Button = _find_button(screen, "Réinitialiser les stats")
+	var c: Vector2 = reset.get_global_rect().get_center() if reset != null else Vector2.ZERO
+	_check(reset != null and rect.has_point(c), "Options : bouton visible en bas de page")
+	var before: int = scroll.scroll_vertical
+	_mouse(vp, c, true)
+	for i: int in range(1, 6):
+		_mouse_move(vp, c + Vector2(0, 14 * i))
+	_mouse(vp, c + Vector2(0, 70), false)
+	await _frames(3)
+	_check(scroll.scroll_vertical < before, "Options : glisser depuis un bouton fait défiler")
+	_check(_find_button(screen, "Confirmer l'effacement ?") == null, "Options : le glisser n'active pas le bouton")
+
+	# Simple appui : clic normal, et la page reste où elle est malgré le rafraîchissement.
+	scroll.jump_to(int(max_scroll))
+	await _frames(2)
+	reset = _find_button(screen, "Réinitialiser les stats")
+	c = reset.get_global_rect().get_center()
+	before = scroll.scroll_vertical
+	_mouse(vp, c, true)
+	_mouse(vp, c, false)
+	await _frames(3)
+	_check(_find_button(screen, "Confirmer l'effacement ?") != null, "Options : un appui reste un clic")
+	_check(absi(scroll.scroll_vertical - before) <= 2, "Options : position conservée après rafraîchissement (%d → %d)" % [before, scroll.scroll_vertical])
+
+	# Lancer : la page continue sur son élan après le lâcher.
+	scroll.jump_to(0)
+	await _frames(2)
+	p = rect.position + Vector2(rect.size.x * 0.5, 300)
+	_mouse(vp, p, true)
+	for i: int in range(1, 5):
+		await create_timer(0.02).timeout
+		_mouse_move(vp, p - Vector2(0, 12 * i))
+	_mouse(vp, p - Vector2(0, 48), false)
+	var at_release: int = scroll.scroll_vertical
+	await create_timer(0.2).timeout
+	_check(scroll.scroll_vertical > at_release, "Options : élan après un lancer (%d → %d)" % [at_release, scroll.scroll_vertical])
+	scroll.jump_to(0)
 
 
 func _test_blackjack(bank: BankrollState) -> void:
@@ -454,6 +539,8 @@ func _test_tutorial_and_options(stats: StatsState) -> void:
 
 	var opts: Node = _mount("res://scenes/stats.tscn")
 	await _frames(3)
+	_press(opts, "Réglages")
+	await _frames(2)
 	_check(_find_button(opts, "Revoir le tutoriel") != null, "bouton « Revoir le tutoriel » dans Options")
 	_check(_has_label(opts, "OPTIONS") or _has_label(opts, "Options"), "écran nommé Options")
 	var beginner: Button = _find_button(opts, "Mode débutant (conseils pendant la partie)")
@@ -936,7 +1023,11 @@ func _test_achievements(stats: StatsState, bank: BankrollState) -> void:
 	await _frames(5)
 	var opt: Node = _mount("res://scenes/stats.tscn")
 	await _frames(3)
+	_check(_press(opt, "Succès"), "Options : onglet Succès")
+	await _frames(2)
 	_check(_find_label_text(opt, "Annonce gagnante"), "Options : liste des succès")
+	_check(_press(opt, "Statistiques"), "Options : onglet Statistiques")
+	await _frames(2)
 	var charts: int = 0
 	for n: Node in opt.find_children("*", "BankChart", true, false):
 		charts += 1

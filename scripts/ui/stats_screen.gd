@@ -1,9 +1,16 @@
 extends Control
-## Options (niveau de ZIA, aide, tutoriel, vibrations) et statistiques de jeu.
+## Options : réglages, statistiques et succès, répartis en onglets sous un en-tête fixe.
 
 const HOME_SCENE: String = "res://scenes/home.tscn"
+const TABS: Array[String] = ["Réglages", "Statistiques", "Succès"]
+enum Tab { SETTINGS, STATS, ACHIEVEMENTS }
+
+## Onglet affiché (mémorisé pendant la session).
+static var tab: int = Tab.SETTINGS
 
 var _content: VBoxContainer
+var _scroll: TouchScroll
+var _tabs: HBoxContainer
 var _confirm_reset: bool = false
 
 
@@ -11,30 +18,16 @@ func _ready() -> void:
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+	for side: String in ["margin_left", "margin_right", "margin_top"]:
 		margin.add_theme_constant_override(side, 16)
+	margin.add_theme_constant_override("margin_bottom", 0)
 	add_child(margin)
 
-	var scroll: ScrollContainer = ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(scroll)
+	var frame: VBoxContainer = VBoxContainer.new()
+	frame.add_theme_constant_override("separation", 10)
+	margin.add_child(frame)
 
-	_content = VBoxContainer.new()
-	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_content.add_theme_constant_override("separation", 12)
-	scroll.add_child(_content)
-
-	Stats.changed.connect(_rebuild)
-	Bankroll.changed.connect(_rebuild)
-	_rebuild()
-	UIKit.fade_in(self)
-
-
-func _rebuild() -> void:
-	for child: Node in _content.get_children():
-		_content.remove_child(child)
-		child.queue_free()
-
+	# En-tête fixe : retour, titre, onglets.
 	var bar: HBoxContainer = HBoxContainer.new()
 	var back: Button = UIKit.outline_button("‹ Accueil", UIKit.TEXT_SOFT, 15)
 	back.custom_minimum_size = Vector2(110, 44)
@@ -43,70 +36,83 @@ func _rebuild() -> void:
 	var title: Label = UIKit.label("Options", 22, UIKit.GOLD, true)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(title)
-	bar.add_child(UIKit.spacer(0))
 	var pad: Control = Control.new()
 	pad.custom_minimum_size = Vector2(110, 0)
 	bar.add_child(pad)
-	_content.add_child(bar)
+	frame.add_child(bar)
 
-	# Banque
-	var bank_box: VBoxContainer = _section("Banque")
-	_row(bank_box, "Actuelle", str(Bankroll.value))
-	_row(bank_box, "Record", str(Bankroll.best))
-	bank_box.add_child(UIKit.label("Évolution (dernières manches en solo)", 12, UIKit.TEXT_SOFT))
-	bank_box.add_child(BankChart.new(Stats.bank_history))
+	_tabs = HBoxContainer.new()
+	_tabs.add_theme_constant_override("separation", 6)
+	frame.add_child(_tabs)
 
-	# Blackjack
-	var bj: VBoxContainer = _section("Blackjack")
-	_row(bj, "Parties", str(Stats.bj_rounds))
-	_row(bj, "Victoires", "%d  (%d %%)" % [Stats.bj_wins, StatsState.percent(Stats.bj_wins, Stats.bj_rounds)])
-	_row(bj, "Défaites", str(Stats.bj_losses))
-	_row(bj, "Égalités", str(Stats.bj_pushes))
-	_row(bj, "Blackjacks", str(Stats.bj_blackjacks))
-	_row(bj, "Gain net", UIKit.signed(Stats.bj_net), _net_color(Stats.bj_net))
+	_scroll = TouchScroll.new()
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	frame.add_child(_scroll)
 
-	# Poker
-	var pk: VBoxContainer = _section("Poker")
-	_row(pk, "Mains", str(Stats.pk_hands))
-	_row(pk, "Victoires", "%d  (%d %%)" % [Stats.pk_wins, StatsState.percent(Stats.pk_wins, Stats.pk_hands)])
-	_row(pk, "Défaites", str(Stats.pk_losses))
-	_row(pk, "Parts égales", str(Stats.pk_splits))
-	_row(pk, "Plus gros pot gagné", str(Stats.pk_biggest_pot))
-	_row(pk, "Gain net", UIKit.signed(Stats.pk_net), _net_color(Stats.pk_net))
+	# Petite marge à droite : la barre de défilement ne chevauche pas les cadres.
+	var inner: MarginContainer = MarginContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("margin_right", 8)
+	_scroll.add_child(inner)
+	_content = VBoxContainer.new()
+	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.add_theme_constant_override("separation", 12)
+	inner.add_child(_content)
 
-	# Dutch
-	var du: VBoxContainer = _section("Dutch (contre ZIA)")
-	_row(du, "Parties", str(Stats.du_games))
-	_row(du, "Victoires", "%d  (%d %%)" % [Stats.du_wins, StatsState.percent(Stats.du_wins, Stats.du_games)])
-	_row(du, "Manches gagnées", "%d / %d" % [Stats.du_round_wins, Stats.du_rounds])
-	_row(du, "Annonces DUTCH réussies", "%d / %d" % [Stats.du_call_wins, Stats.du_calls])
-	_row(du, "Meilleure main", "—" if Stats.du_best_hand >= 99 else "%d pts" % Stats.du_best_hand)
+	Stats.changed.connect(_rebuild)
+	Bankroll.changed.connect(_rebuild)
+	_build_tabs()
+	_rebuild()
+	UIKit.fade_in(self)
 
-	# Succès
-	var ach: VBoxContainer = _section("Succès · %d / %d" % [Stats.achievements.size(), StatsState.ACHIEVEMENTS.size()])
-	for a: Array in StatsState.ACHIEVEMENTS:
-		ach.add_child(_achievement_row(a, Stats.has_achievement(str(a[0]))))
 
-	# Joueurs enregistrés
-	var players: VBoxContainer = _section("Joueurs enregistrés · %d" % ProfileStore.count())
-	var pl: Button = UIKit.outline_button("Voir la progression des joueurs", UIKit.GOLD, 16)
-	pl.custom_minimum_size = Vector2(0, 48)
-	pl.pressed.connect(func() -> void:
-		ProfilesScreen.return_scene = "res://scenes/stats.tscn"
-		get_tree().change_scene_to_file(ProfilesScreen.SCENE)
-	)
-	players.add_child(pl)
+func _build_tabs() -> void:
+	for child: Node in _tabs.get_children():
+		_tabs.remove_child(child)
+		child.queue_free()
+	for i: int in TABS.size():
+		var b: Button = (
+			UIKit.button(TABS[i], UIKit.GOLD, UIKit.INK, 15)
+			if i == tab
+			else UIKit.outline_button(TABS[i], Color.WHITE, 15)
+		)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 44)
+		b.pressed.connect(_select_tab.bind(i))
+		_tabs.add_child(b)
 
-	# Sauvegarde
-	var backup: VBoxContainer = _section("Sauvegarde des données")
-	var bk: Button = UIKit.outline_button("Exporter / importer", UIKit.GOLD, 16)
-	bk.custom_minimum_size = Vector2(0, 48)
-	bk.pressed.connect(func() -> void: get_tree().change_scene_to_file(BackupScreen.SCENE))
-	backup.add_child(bk)
 
-	# Réglages
-	var cfg: VBoxContainer = _section("Réglages")
-	cfg.add_child(UIKit.label("Niveau de ZIA", 14, UIKit.TEXT_SOFT))
+func _select_tab(i: int) -> void:
+	if i == tab:
+		_scroll.jump_to(0)
+		return
+	tab = i
+	_confirm_reset = false
+	_build_tabs()
+	_rebuild()
+	_scroll.jump_to(0)
+
+
+## Reconstruit le contenu de l'onglet. Les nouveaux éléments sont ajoutés avant de retirer les anciens :
+## la page garde sa hauteur pendant l'échange et la position de défilement ne saute pas.
+func _rebuild() -> void:
+	var old: Array[Node] = _content.get_children()
+	match tab:
+		Tab.STATS:
+			_build_stats()
+		Tab.ACHIEVEMENTS:
+			_build_achievements()
+		_:
+			_build_settings()
+	_content.add_child(UIKit.spacer(12))
+	for child: Node in old:
+		_content.remove_child(child)
+		child.queue_free()
+
+
+func _build_settings() -> void:
+	var game: VBoxContainer = _section("Jeu")
+	game.add_child(_small("Niveau de ZIA"))
 	var levels: HBoxContainer = HBoxContainer.new()
 	levels.add_theme_constant_override("separation", 8)
 	for i: int in PokerEngine.PROFILES.size():
@@ -120,26 +126,11 @@ func _rebuild() -> void:
 		b.custom_minimum_size = Vector2(0, 48)
 		b.pressed.connect(Stats.set_difficulty.bind(i))
 		levels.add_child(b)
-	cfg.add_child(levels)
-	var note: Label = UIKit.label("Appliqué à la prochaine partie de poker.", 12, UIKit.TEXT_SOFT)
-	cfg.add_child(note)
+	game.add_child(levels)
+	game.add_child(_small("Appliqué à la prochaine partie de poker."))
+	game.add_child(_switch("Vibrations", Stats.haptics, Stats.set_haptics))
+	game.add_child(_switch("Sons", Stats.sound, Stats.set_sound))
 
-	var haptic_box: CheckButton = CheckButton.new()
-	haptic_box.text = "Vibrations"
-	haptic_box.button_pressed = Stats.haptics
-	haptic_box.focus_mode = Control.FOCUS_NONE
-	haptic_box.add_theme_font_size_override("font_size", 16)
-	haptic_box.toggled.connect(Stats.set_haptics)
-	cfg.add_child(haptic_box)
-	var sound_box: CheckButton = CheckButton.new()
-	sound_box.text = "Sons"
-	sound_box.button_pressed = Stats.sound
-	sound_box.focus_mode = Control.FOCUS_NONE
-	sound_box.add_theme_font_size_override("font_size", 16)
-	sound_box.toggled.connect(Stats.set_sound)
-	cfg.add_child(sound_box)
-
-	# Aide
 	var help: VBoxContainer = _section("Aide")
 	var beginner_box: CheckBox = UIKit.check("Mode débutant (conseils pendant la partie)", Stats.beginner)
 	beginner_box.toggled.connect(Stats.set_beginner)
@@ -152,14 +143,90 @@ func _rebuild() -> void:
 	replay.pressed.connect(_replay_tutorial)
 	help.add_child(replay)
 
+	var who: String = ProfileStore.active_name()
+	var players: VBoxContainer = _section("Joueurs enregistrés · %d" % ProfileStore.count())
+	players.add_child(_small("Joueur actif en solo : %s" % (who if who != "" else "invité")))
+	var pl: Button = UIKit.outline_button("Voir la progression des joueurs", UIKit.GOLD, 16)
+	pl.custom_minimum_size = Vector2(0, 48)
+	pl.pressed.connect(func() -> void:
+		ProfilesScreen.return_scene = "res://scenes/stats.tscn"
+		get_tree().change_scene_to_file(ProfilesScreen.SCENE)
+	)
+	players.add_child(pl)
+
+	var backup: VBoxContainer = _section("Sauvegarde des données")
+	var bk: Button = UIKit.outline_button("Exporter / importer", UIKit.GOLD, 16)
+	bk.custom_minimum_size = Vector2(0, 48)
+	bk.pressed.connect(func() -> void: get_tree().change_scene_to_file(BackupScreen.SCENE))
+	backup.add_child(bk)
+
+	_content.add_child(UIKit.label("AsZimut v%s" % AppInfo.version(), 12, UIKit.TEXT_SOFT))
+
+
+func _build_stats() -> void:
+	var bank_box: VBoxContainer = _section("Banque")
+	_row(bank_box, "Actuelle", str(Bankroll.value))
+	_row(bank_box, "Record", str(Bankroll.best))
+	bank_box.add_child(_small("Évolution (dernières manches en solo)"))
+	bank_box.add_child(BankChart.new(Stats.bank_history))
+
+	var bj: VBoxContainer = _section("Blackjack")
+	_row(bj, "Parties", str(Stats.bj_rounds))
+	_row(bj, "Victoires", "%d  (%d %%)" % [Stats.bj_wins, StatsState.percent(Stats.bj_wins, Stats.bj_rounds)])
+	_row(bj, "Défaites", str(Stats.bj_losses))
+	_row(bj, "Égalités", str(Stats.bj_pushes))
+	_row(bj, "Blackjacks", str(Stats.bj_blackjacks))
+	_row(bj, "Gain net", UIKit.signed(Stats.bj_net), _net_color(Stats.bj_net))
+
+	var pk: VBoxContainer = _section("Poker")
+	_row(pk, "Mains", str(Stats.pk_hands))
+	_row(pk, "Victoires", "%d  (%d %%)" % [Stats.pk_wins, StatsState.percent(Stats.pk_wins, Stats.pk_hands)])
+	_row(pk, "Défaites", str(Stats.pk_losses))
+	_row(pk, "Parts égales", str(Stats.pk_splits))
+	_row(pk, "Plus gros pot gagné", str(Stats.pk_biggest_pot))
+	_row(pk, "Gain net", UIKit.signed(Stats.pk_net), _net_color(Stats.pk_net))
+
+	var du: VBoxContainer = _section("Dutch (contre ZIA)")
+	_row(du, "Parties", str(Stats.du_games))
+	_row(du, "Victoires", "%d  (%d %%)" % [Stats.du_wins, StatsState.percent(Stats.du_wins, Stats.du_games)])
+	_row(du, "Manches gagnées", "%d / %d" % [Stats.du_round_wins, Stats.du_rounds])
+	_row(du, "Annonces DUTCH réussies", "%d / %d" % [Stats.du_call_wins, Stats.du_calls])
+	_row(du, "Meilleure main", "—" if Stats.du_best_hand >= 99 else "%d pts" % Stats.du_best_hand)
+
 	var reset_text: String = "Confirmer l'effacement ?" if _confirm_reset else "Réinitialiser les stats"
 	var reset: Button = UIKit.outline_button(
 		reset_text, UIKit.DANGER if _confirm_reset else UIKit.WARNING_TEXT, 15
 	)
+	reset.custom_minimum_size = Vector2(0, 48)
 	reset.pressed.connect(_on_reset)
 	_content.add_child(reset)
 
-	_content.add_child(UIKit.label("AsZimut v%s" % AppInfo.version(), 12, UIKit.TEXT_SOFT))
+
+func _build_achievements() -> void:
+	var ach: VBoxContainer = _section("Succès · %d / %d" % [Stats.achievements.size(), StatsState.ACHIEVEMENTS.size()])
+	# Débloqués d'abord, puis ceux qui restent à obtenir.
+	for done: bool in [true, false]:
+		for a: Array in StatsState.ACHIEVEMENTS:
+			if Stats.has_achievement(str(a[0])) == done:
+				ach.add_child(_achievement_row(a, done))
+
+
+func _small(text: String) -> Label:
+	var l: Label = UIKit.label(text, 13, UIKit.TEXT_SOFT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
+
+
+func _switch(text: String, on: bool, setter: Callable) -> CheckButton:
+	var box: CheckButton = CheckButton.new()
+	box.text = text
+	box.button_pressed = on
+	box.focus_mode = Control.FOCUS_NONE
+	box.custom_minimum_size = Vector2(0, 44)
+	box.add_theme_font_size_override("font_size", 16)
+	box.toggled.connect(setter)
+	return box
 
 
 func _section(title: String) -> VBoxContainer:
