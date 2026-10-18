@@ -200,6 +200,7 @@ func _refresh() -> void:
 func _phase_sound() -> void:
 	match engine.phase:
 		DutchEngine.Phase.ROUND_OVER, DutchEngine.Phase.MATCH_OVER:
+			_record_stats()
 			var human_won: bool = false
 			for w: int in engine.round_winners:
 				if not engine.bots[w]:
@@ -210,6 +211,18 @@ func _phase_sound() -> void:
 				SfxPlayer.play("alert")
 			else:
 				SfxPlayer.play("card", -4.0)
+
+
+## Statistiques et succès : seulement en solo contre ZIA (un seul humain).
+func _record_stats() -> void:
+	var humans: Array[int] = _humans()
+	if humans.size() != 1:
+		return
+	var p: int = humans[0]
+	var won: bool = engine.round_winners.has(p) and not (engine.caller_failed and engine.dutch_caller == p)
+	Stats.record_dutch_round(engine.hand_total(p), won, engine.dutch_caller == p)
+	if engine.phase == DutchEngine.Phase.MATCH_OVER:
+		Stats.record_dutch_match(str(engine.ranking()[0]["name"]) == engine.names[p])
 
 
 func _build_table() -> void:

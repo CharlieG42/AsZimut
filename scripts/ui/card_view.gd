@@ -16,6 +16,11 @@ var _back_style: StyleBoxFlat
 var _back_inner: StyleBoxFlat
 var _empty_style: StyleBoxFlat
 var _tween: Tween
+## Décalage de dessin (animation de distribution : la carte glisse depuis le sabot).
+var slide: Vector2 = Vector2.ZERO:
+	set(v):
+		slide = v
+		queue_redraw()
 
 
 func _init(scale_factor: float = 1.0) -> void:
@@ -64,6 +69,7 @@ func show_empty() -> void:
 	face_down = false
 	scale = Vector2.ONE
 	modulate.a = 1.0
+	slide = Vector2.ZERO
 	queue_redraw()
 
 
@@ -73,16 +79,30 @@ func _kill_tween() -> void:
 
 
 func _pop_in() -> void:
-	SfxPlayer.play("card", -4.0)
 	_kill_tween()
-	scale = Vector2(0.6, 0.6)
+	# Dans une rangée, les cartes arrivent l'une après l'autre.
+	var delay: float = 0.0
+	if get_parent() is CardRow:
+		var fresh: int = 0
+		for sibling: Node in get_parent().get_children():
+			if sibling == self:
+				break
+			if sibling is CardView and (sibling as CardView).modulate.a < 0.99:
+				fresh += 1
+		delay = 0.09 * fresh
+	scale = Vector2(0.85, 0.85)
 	modulate.a = 0.0
+	slide = Vector2(size.x * 0.6, -size.y * 0.9)
 	_tween = create_tween()
 	_tween.set_parallel(true)
+	_tween.tween_callback(SfxPlayer.play.bind("card", -4.0)).set_delay(delay)
+	_tween.tween_property(self, "slide", Vector2.ZERO, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(
+		Tween.EASE_OUT
+	).set_delay(delay)
 	_tween.tween_property(self, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(
 		Tween.EASE_OUT
-	)
-	_tween.tween_property(self, "modulate:a", 1.0, 0.15)
+	).set_delay(delay)
+	_tween.tween_property(self, "modulate:a", 1.0, 0.12).set_delay(delay)
 
 
 func _flip() -> void:
@@ -100,6 +120,7 @@ func _reveal() -> void:
 
 
 func _draw() -> void:
+	draw_set_transform(slide, 0.0, Vector2.ONE)
 	var rect: Rect2 = Rect2(Vector2.ZERO, size)
 	if empty:
 		draw_style_box(_empty_style, rect)
@@ -129,9 +150,9 @@ func _draw_face(rect: Rect2) -> void:
 
 	_draw_corner(font, label, fs, pad, suit, color)
 	# Coin opposé : même index retourné de 180°.
-	draw_set_transform(size, PI, Vector2.ONE)
+	draw_set_transform(size + slide, PI, Vector2.ONE)
 	_draw_corner(font, label, fs, pad, suit, color)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_set_transform(slide, 0.0, Vector2.ONE)
 
 	draw_suit(self, Vector2(size.x * 0.5, size.y * 0.54), size.x * 0.27, suit, color)
 

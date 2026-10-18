@@ -419,6 +419,11 @@ func _refresh_result() -> void:
 		_result_key = key
 		UIKit.pop(_result_panel)
 		SfxPlayer.play("chip")
+		if LocalSession.solo_poker:
+			_sync_bank()
+			Stats.note_bank(Bankroll.value)
+			if e.is_game_over() and not e.aborted and e.standings()[0] == 0 and e.seats[0].stack > 0:
+				Stats.record_table_win()
 
 
 func _refresh_hole() -> void:

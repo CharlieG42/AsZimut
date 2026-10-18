@@ -67,19 +67,32 @@ try_secrets() {
   fi
 
   # 2) Mot de passe du keystore (on essaie aussi sans espaces ni retour à la ligne parasites).
-  local out pass_ok=""
+  local out pass_ok="" swapped=""
   for candidate in "$KS_PASS" "$(trim "$KS_PASS")"; do
     if out="$(keytool -list -keystore "$KS_FILE" -storepass "$candidate" 2>&1)"; then
       pass_ok="$candidate"
       break
     fi
   done
+  if [ -z "$pass_ok" ] && [ -n "${KEY_PASS:-}" ]; then
+    # Secrets inversés ? On essaie le mot de passe de la clé sur le keystore.
+    for candidate in "$KEY_PASS" "$(trim "$KEY_PASS")"; do
+      if keytool -list -keystore "$KS_FILE" -storepass "$candidate" > /dev/null 2>&1; then
+        pass_ok="$candidate"
+        swapped="oui"
+        warn "ANDROID_STORE_PASSWORD est refusé, mais ANDROID_KEY_PASSWORD ouvre le keystore : il est utilisé à la place. Les deux secrets sont probablement inversés."
+        break
+      fi
+    done
+  fi
   if [ -z "$pass_ok" ]; then
     DIAG="ANDROID_STORE_PASSWORD"
-    REASON="ANDROID_STORE_PASSWORD n'ouvre pas le keystore (keytool : $(printf '%s' "$out" | grep -i 'error\|exception' | head -1 | sed 's/^.*Exception: //'))"
+    local err
+    err="$(printf '%s' "$out" | grep -i 'error\|exception' | head -1 | sed 's/^.*Exception: //')"
+    REASON="ANDROID_STORE_PASSWORD n'ouvre pas le keystore ${kind} de ${size} octets (keytool : ${err}). ANDROID_KEY_PASSWORD ne l'ouvre pas non plus : vérifiez que le base64 vient bien du keystore de ce mot de passe"
     return 1
   fi
-  if [ "$pass_ok" != "$KS_PASS" ]; then
+  if [ -z "$swapped" ] && [ "$pass_ok" != "$KS_PASS" ]; then
     warn "ANDROID_STORE_PASSWORD contient des espaces ou un retour à la ligne en trop : corrigé automatiquement, mais pensez à le recoller proprement."
   fi
   KS_PASS="$pass_ok"

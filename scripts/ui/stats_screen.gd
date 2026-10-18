@@ -53,6 +53,8 @@ func _rebuild() -> void:
 	var bank_box: VBoxContainer = _section("Banque")
 	_row(bank_box, "Actuelle", str(Bankroll.value))
 	_row(bank_box, "Record", str(Bankroll.best))
+	bank_box.add_child(UIKit.label("Évolution (dernières manches en solo)", 12, UIKit.TEXT_SOFT))
+	bank_box.add_child(BankChart.new(Stats.bank_history))
 
 	# Blackjack
 	var bj: VBoxContainer = _section("Blackjack")
@@ -71,6 +73,19 @@ func _rebuild() -> void:
 	_row(pk, "Parts égales", str(Stats.pk_splits))
 	_row(pk, "Plus gros pot gagné", str(Stats.pk_biggest_pot))
 	_row(pk, "Gain net", UIKit.signed(Stats.pk_net), _net_color(Stats.pk_net))
+
+	# Dutch
+	var du: VBoxContainer = _section("Dutch (contre ZIA)")
+	_row(du, "Parties", str(Stats.du_games))
+	_row(du, "Victoires", "%d  (%d %%)" % [Stats.du_wins, StatsState.percent(Stats.du_wins, Stats.du_games)])
+	_row(du, "Manches gagnées", "%d / %d" % [Stats.du_round_wins, Stats.du_rounds])
+	_row(du, "Annonces DUTCH réussies", "%d / %d" % [Stats.du_call_wins, Stats.du_calls])
+	_row(du, "Meilleure main", "—" if Stats.du_best_hand >= 99 else "%d pts" % Stats.du_best_hand)
+
+	# Succès
+	var ach: VBoxContainer = _section("Succès · %d / %d" % [Stats.achievements.size(), StatsState.ACHIEVEMENTS.size()])
+	for a: Array in StatsState.ACHIEVEMENTS:
+		ach.add_child(_achievement_row(a, Stats.has_achievement(str(a[0]))))
 
 	# Réglages
 	var cfg: VBoxContainer = _section("Réglages")
@@ -152,6 +167,33 @@ func _row(parent: VBoxContainer, name_text: String, value_text: String, color: C
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(v)
 	parent.add_child(row)
+
+
+func _achievement_row(a: Array, done: bool) -> Control:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var badge: PanelContainer = PanelContainer.new()
+	badge.custom_minimum_size = Vector2(30, 30)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.add_theme_stylebox_override(
+		"panel", UIKit.box(UIKit.GOLD if done else Color(1, 1, 1, 0.06), 15, Color(1, 1, 1, 0.15), 1)
+	)
+	badge.add_child(UIKit.label("★" if done else "?", 15, UIKit.INK if done else UIKit.TEXT_SOFT, true))
+	row.add_child(badge)
+	var col: VBoxContainer = VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 0)
+	var t: Label = UIKit.label(str(a[1]), 15, Color.WHITE if done else UIKit.TEXT_SOFT, true)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	col.add_child(t)
+	var d: Label = UIKit.label(str(a[2]), 12, UIKit.TEXT_SOFT)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(d)
+	row.add_child(col)
+	if not done:
+		row.modulate.a = 0.6
+	return row
 
 
 func _net_color(net: int) -> Color:

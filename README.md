@@ -69,6 +69,14 @@ désactivables dans Options (« Sons »).
 ### Banque
 La banque est commune aux deux jeux et **sauvegardée sur l'appareil** (`user://aszimut.cfg`), avec le **record** de banque.
 
+### Succès et courbe de la banque
+12 **succès** (premier blackjack, gros pot, table solo gagnée, annonce DUTCH gagnante…) : un bandeau
+« Succès débloqué » s'affiche quel que soit l'écran, et la liste est dans Options. Options montre aussi
+la **courbe de la banque** sur les 80 dernières manches solo et les **statistiques Dutch** (parties contre ZIA).
+
+### Animations
+Les cartes **glissent depuis le sabot** l'une après l'autre à la distribution, et se retournent quand elles sont révélées.
+
 ### Statistiques et réglages
 Écran « Options & statistiques » : parties, victoires, gains nets, plus gros pot, niveau de ZIA (aussi pour les bots),
 vibrations, sons, mode débutant, tutoriel, et réinitialisation en deux étapes (`user://aszimut_stats.cfg`).
@@ -171,8 +179,10 @@ Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.
 ## Roadmap
 
 - [x] Sons (cartes, jetons, résultats)
-- [ ] Animations de distribution et de jetons
-- [ ] Statistiques Dutch, succès, courbe de la banque
+- [x] Animation de distribution des cartes
+- [x] Statistiques Dutch, succès, courbe de la banque
+- [ ] Split et assurance au blackjack local à plusieurs
+- [ ] Animation des jetons vers le pot
 - [ ] Plus de jeux (une future table de modules à la façon Sebae)
 
 ---

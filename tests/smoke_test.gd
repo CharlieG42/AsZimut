@@ -73,6 +73,7 @@ func _run() -> void:
 	await _test_dutch_ui(stats)
 	await _test_about()
 	await _test_solo_table_and_resume(bank)
+	await _test_achievements(stats, bank)
 	GameSave.clear()
 
 	print("")
@@ -906,3 +907,33 @@ func _test_solo_table_and_resume(bank: BankrollState) -> void:
 	_unmount(du2)
 	GameSave.clear()
 	LocalSession.solo = false
+
+
+func _test_achievements(stats: StatsState, bank: BankrollState) -> void:
+	stats.reset_stats()
+	stats.achievements = []
+	var unlocked: Array[String] = []
+	var cb: Callable = func(title: String, _d: String) -> void: unlocked.append(title)
+	stats.achievement_unlocked.connect(cb)
+	stats.record_blackjack(BlackjackEngine.Outcome.BLACKJACK, 15)
+	_check(stats.has_achievement("bj_first") and unlocked.has("Premier blackjack"), "succès : premier blackjack")
+	stats.record_blackjack(BlackjackEngine.Outcome.BLACKJACK, 15)
+	_check(unlocked.size() == 1, "succès : pas de doublon")
+	stats.record_dutch_round(2, true, true)
+	_check(stats.has_achievement("du_call") and stats.has_achievement("du_low"), "succès : annonce et main parfaite")
+	stats.record_dutch_match(true)
+	_check(stats.du_games == 1 and stats.du_wins == 1 and stats.has_achievement("du_first"), "stats Dutch")
+	for v: int in [1000, 1100, 900, 1500]:
+		stats.note_bank(v)
+	_check(stats.bank_history.size() == 4 and stats.bank_history[3] == 1500, "historique de la banque")
+	await _frames(5)
+	var opt: Node = _mount("res://scenes/stats.tscn")
+	await _frames(3)
+	_check(_find_label_text(opt, "Annonce gagnante"), "Options : liste des succès")
+	var charts: int = 0
+	for n: Node in opt.find_children("*", "BankChart", true, false):
+		charts += 1
+	_check(charts == 1, "Options : courbe de la banque")
+	_unmount(opt)
+	stats.achievement_unlocked.disconnect(cb)
+	stats.reset_stats()

@@ -250,6 +250,7 @@ func _banner_kind() -> int:
 
 func _on_hand_finished(outcome: int, net: int, pot_won: int) -> void:
 	Stats.record_poker(outcome, net, pot_won)
+	Stats.note_bank(Bankroll.value)
 	match outcome:
 		PokerEngine.HandOutcome.WIN:
 			UIKit.haptic(Stats.haptics, 60)
