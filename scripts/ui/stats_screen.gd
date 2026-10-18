@@ -7,6 +7,8 @@ enum Tab { SETTINGS, STATS, ACHIEVEMENTS }
 
 ## Onglet affiché (mémorisé pendant la session).
 static var tab: int = Tab.SETTINGS
+## Joueur dont on consulte les statistiques ("" = tout l'appareil).
+static var view_id: String = ""
 
 var _content: VBoxContainer
 var _scroll: TouchScroll
@@ -164,6 +166,95 @@ func _build_settings() -> void:
 
 
 func _build_stats() -> void:
+	_build_viewer_chips()
+	if ProfileStore.exists(view_id):
+		_build_player_stats(view_id)
+		return
+	_build_global_stats()
+
+
+## Choix de la personne dont on affiche le détail : tout l'appareil ou un joueur enregistré.
+func _build_viewer_chips() -> void:
+	if ProfileStore.count() == 0:
+		return
+	var box: VBoxContainer = _section("Afficher les statistiques de")
+	var flow: HFlowContainer = HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 6)
+	flow.add_theme_constant_override("v_separation", 6)
+	box.add_child(flow)
+	flow.add_child(_chip("Appareil (tous)", not ProfileStore.exists(view_id), ""))
+	for p: Dictionary in ProfileStore.profiles():
+		var id: String = str(p["id"])
+		var label: String = str(p["name"])
+		if id == ProfileStore.active_id():
+			label = "★ " + label
+		flow.add_child(_chip(label, id == view_id, id))
+
+
+func _chip(text: String, selected: bool, id: String) -> Button:
+	var b: Button = (
+		UIKit.button(text, UIKit.GOLD, UIKit.INK, 14)
+		if selected
+		else UIKit.outline_button(text, Color.WHITE, 14)
+	)
+	b.custom_minimum_size = Vector2(72, 40)
+	b.pressed.connect(_select_viewer.bind(id))
+	return b
+
+
+func _select_viewer(id: String) -> void:
+	view_id = id
+	_rebuild()
+
+
+## Détail d'un joueur enregistré : même niveau de précision que l'appareil, plus ses gains cumulés.
+func _build_player_stats(id: String) -> void:
+	var p: Dictionary = ProfileStore.get_profile(id)
+	var bj: Dictionary = ProfileStore.game_stats(id, "bj")
+	var pk: Dictionary = ProfileStore.game_stats(id, "pk")
+	var du: Dictionary = ProfileStore.game_stats(id, "du")
+	var total: int = ProfileStore.total_net(id)
+
+	var bank_box: VBoxContainer = _section("Banque · %s" % str(p["name"]))
+	_row(bank_box, "Actuelle", str(ProfileStore.bank_of(id)))
+	_row(bank_box, "Record", str(int(p.get("best_bank", ProfileStore.START_BANK))))
+	_row(bank_box, "Gains cumulés", UIKit.signed(total), _net_color(total))
+	_row(bank_box, "Parties jouées", str(int(bj["games"]) + int(pk["games"]) + int(du["games"])))
+	bank_box.add_child(_small("Gains cumulés (blackjack + poker), partie après partie"))
+	var chart: BankChart = BankChart.new(ProfileStore.history_values(id))
+	chart.baseline = 0
+	chart.empty_text = "Jouez quelques parties pour voir la courbe."
+	bank_box.add_child(chart)
+
+	var bj_box: VBoxContainer = _section("Blackjack")
+	_row(bj_box, "Parties", str(int(bj["games"])))
+	_row(bj_box, "Victoires", "%d  (%d %%)" % [int(bj["wins"]), StatsState.percent(int(bj["wins"]), int(bj["games"]))])
+	_row(bj_box, "Défaites", str(int(bj["losses"])))
+	_row(bj_box, "Égalités", str(int(bj["pushes"])))
+	_row(bj_box, "Blackjacks", str(int(bj["blackjacks"])))
+	_row(bj_box, "Gain net", UIKit.signed(int(bj["net"])), _net_color(int(bj["net"])))
+
+	var pk_box: VBoxContainer = _section("Poker")
+	_row(pk_box, "Parties", str(int(pk["games"])))
+	_row(pk_box, "Victoires", "%d  (%d %%)" % [int(pk["wins"]), StatsState.percent(int(pk["wins"]), int(pk["games"]))])
+	_row(pk_box, "Défaites", str(int(pk["losses"])))
+	_row(pk_box, "Parts égales", str(int(pk["pushes"])))
+	_row(pk_box, "Plus gros pot gagné", str(int(pk["biggest_pot"])))
+	_row(pk_box, "Gain net", UIKit.signed(int(pk["net"])), _net_color(int(pk["net"])))
+
+	var du_box: VBoxContainer = _section("Dutch")
+	_row(du_box, "Parties", str(int(du["games"])))
+	_row(du_box, "Victoires", "%d  (%d %%)" % [int(du["wins"]), StatsState.percent(int(du["wins"]), int(du["games"]))])
+	_row(du_box, "Meilleur total", "—" if int(du["best"]) < 0 else "%d pts" % int(du["best"]))
+
+	var note: String = (
+		"Une partie locale compte pour chaque joueur enregistré ; en solo, chaque manche de blackjack ou main de poker compte. "
+		+ "Défaites, égalités et courbe sont suivies depuis l'ajout de cette page."
+	)
+	_content.add_child(_small(note))
+
+
+func _build_global_stats() -> void:
 	var bank_box: VBoxContainer = _section("Banque")
 	_row(bank_box, "Actuelle", str(Bankroll.value))
 	_row(bank_box, "Record", str(Bankroll.best))

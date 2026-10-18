@@ -7,6 +7,8 @@ const START_BANK: int = 1000
 const MIN_BANK: int = 100
 const MAX_GROUPS: int = 6
 const GAME_KEYS: Array[String] = ["bj", "pk", "du"]
+## Nombre maximal de points conservés dans l'historique des gains cumulés d'un joueur.
+const HISTORY_MAX: int = 300
 
 static var path: String = "user://aszimut_profiles.json"
 static var _data: Dictionary = {}
@@ -46,8 +48,8 @@ static func _now() -> int:
 
 static func _empty_stats() -> Dictionary:
 	return {
-		"bj": {"games": 0, "wins": 0, "net": 0},
-		"pk": {"games": 0, "wins": 0, "net": 0},
+		"bj": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "blackjacks": 0, "net": 0},
+		"pk": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "splits": 0, "biggest_pot": 0, "net": 0},
 		"du": {"games": 0, "wins": 0, "best": -1},
 	}
 
@@ -208,13 +210,16 @@ static func solo_name() -> String:
 
 ## Enregistre le résultat d'une partie (ou manche) solo pour le joueur actif.
 ## `delta` : gain net en jetons ; `points` : total Dutch (-1 si sans objet).
-static func record_active(game_key: String, won: bool, delta: int, points: int = -1) -> void:
+## `extra` : compteurs détaillés (« blackjacks », « splits » : +1 ; « biggest_pot » : plus gros pot).
+static func record_active(game_key: String, won: bool, delta: int, points: int = -1, extra: Dictionary = {}) -> void:
 	var id: String = active_id()
 	if id == "":
 		return
 	var e: Dictionary = {"id": id, "rank": 0 if won else 1, "start": 0, "final": delta}
 	if points >= 0:
 		e["points"] = points
+	if not extra.is_empty():
+		e["extra"] = extra
 	record_game(game_key, [e] as Array[Dictionary], false)
 
 
@@ -289,13 +294,62 @@ static func record_game(game_key: String, entries: Array[Dictionary], update_ban
 			var best: int = int(s.get("best", -1))
 			s["best"] = pts if best < 0 else mini(best, pts)
 		else:
-			s["net"] = int(s.get("net", 0)) + int(e.get("final", 0)) - int(e.get("start", 0))
+			var gain: int = int(e.get("final", 0)) - int(e.get("start", 0))
+			# Cumul avant cette partie (les parties d'avant l'historique sont reprises des compteurs).
+			var before: int = total_net_of(p)
+			s["net"] = int(s.get("net", 0)) + gain
+			if gain < 0:
+				s["losses"] = int(s.get("losses", 0)) + 1
+			elif gain == 0:
+				s["pushes"] = int(s.get("pushes", 0)) + 1
+			var extra: Dictionary = e.get("extra", {})
+			for k: Variant in extra.keys():
+				if str(k) == "biggest_pot":
+					s["biggest_pot"] = maxi(int(s.get("biggest_pot", 0)), int(extra[k]))
+				else:
+					s[str(k)] = int(s.get(str(k), 0)) + int(extra[k])
+			var hist: Array = p.get("history", [])
+			hist.append([now, before + gain])
+			while hist.size() > HISTORY_MAX:
+				hist.pop_front()
+			p["history"] = hist
 			if update_banks:
 				p["bank"] = maxi(0, int(e.get("final", 0)))
 				p["best_bank"] = maxi(int(p.get("best_bank", START_BANK)), int(p["bank"]))
 		p["stats"] = stats
 		p["last_played"] = now
 	_save()
+
+
+## Gains cumulés (blackjack + poker) d'un profil, tous temps confondus.
+static func total_net_of(p: Dictionary) -> int:
+	var hist: Array = p.get("history", [])
+	if not hist.is_empty():
+		return int((hist[hist.size() - 1] as Array)[1])
+	var stats: Dictionary = p.get("stats", {})
+	return int((stats.get("bj", {}) as Dictionary).get("net", 0)) + int((stats.get("pk", {}) as Dictionary).get("net", 0))
+
+
+static func total_net(id: String) -> int:
+	return total_net_of(get_profile(id))
+
+
+## Valeurs de l'historique des gains cumulés (une par partie, la plus ancienne d'abord).
+static func history_values(id: String) -> Array[int]:
+	var out: Array[int] = []
+	for pt: Variant in get_profile(id).get("history", []):
+		out.append(int((pt as Array)[1]))
+	return out
+
+
+## Compteurs d'un jeu ("bj", "pk" ou "du") avec toutes les clés présentes (0 par défaut).
+static func game_stats(id: String, game_key: String) -> Dictionary:
+	var out: Dictionary = (_empty_stats()[game_key] as Dictionary).duplicate()
+	var stats: Dictionary = get_profile(id).get("stats", {})
+	var have: Dictionary = stats.get(game_key, {})
+	for k: Variant in have.keys():
+		out[k] = int(have[k])
+	return out
 
 
 ## Résumé lisible des statistiques d'un profil.

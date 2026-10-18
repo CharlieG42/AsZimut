@@ -3,6 +3,9 @@ extends Control
 ## Courbe de l'évolution de la banque (dernières manches), dessinée en code.
 
 var values: Array[int] = []
+## Valeur repérée par un pointillé (la banque de départ, ou 0 pour des gains cumulés).
+var baseline: int = BankrollState.START_VALUE
+var empty_text: String = "Jouez quelques manches pour voir la courbe."
 
 
 func _init(data: Array[int]) -> void:
@@ -17,7 +20,7 @@ func _draw() -> void:
 	var font: Font = UIKit.bold_font()
 	if values.size() < 2:
 		draw_string(
-			font, Vector2(0, size.y * 0.5 + 5), "Jouez quelques manches pour voir la courbe.",
+			font, Vector2(0, size.y * 0.5 + 5), empty_text,
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, UIKit.TEXT_SOFT
 		)
 		return
@@ -38,8 +41,8 @@ func _draw() -> void:
 		var y: float = _y(v, lo, hi, top, bottom)
 		draw_line(Vector2(left, y), Vector2(right, y), grid, 1.0)
 		draw_string(font, Vector2(4, y + 4), _short(v), HORIZONTAL_ALIGNMENT_LEFT, left - 8, 11, UIKit.TEXT_SOFT)
-	if BankrollState.START_VALUE > lo and BankrollState.START_VALUE < hi:
-		var ys: float = _y(BankrollState.START_VALUE, lo, hi, top, bottom)
+	if baseline > lo and baseline < hi:
+		var ys: float = _y(baseline, lo, hi, top, bottom)
 		draw_dashed_line(Vector2(left, ys), Vector2(right, ys), Color(1, 1, 1, 0.18), 1.0, 4.0)
 
 	var pts: PackedVector2Array = PackedVector2Array()

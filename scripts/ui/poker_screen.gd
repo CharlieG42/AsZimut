@@ -250,7 +250,12 @@ func _banner_kind() -> int:
 
 func _on_hand_finished(outcome: int, net: int, pot_won: int) -> void:
 	Stats.record_poker(outcome, net, pot_won)
-	ProfileStore.record_active("pk", net > 0, net)
+	var pk_extra: Dictionary = {}
+	if outcome == PokerEngine.HandOutcome.WIN:
+		pk_extra["biggest_pot"] = pot_won
+	elif outcome == PokerEngine.HandOutcome.SPLIT:
+		pk_extra["splits"] = 1
+	ProfileStore.record_active("pk", net > 0, net, -1, pk_extra)
 	Stats.note_bank(Bankroll.value)
 	match outcome:
 		PokerEngine.HandOutcome.WIN:

@@ -132,6 +132,7 @@ func _test_stats(stats: StatsState) -> void:
 	_check(_find_button(screen, "Réinitialiser les stats") == null, "Options : stats dans un autre onglet")
 	_check(_press(screen, "Statistiques"), "Options : onglet Statistiques")
 	await _frames(2)
+	_check(_find_button_prefix(screen, "Appareil (tous)") == null, "Options : pas de choix de joueur sans joueur enregistré")
 	_check(_find_button(screen, "Confirmer l'effacement ?") == null, "pas de confirmation au départ")
 	_check(_press(screen, "Réinitialiser les stats"), "bouton réinitialiser")
 	await _frames(2)
@@ -1155,10 +1156,37 @@ func _test_active_ui(bank: BankrollState) -> void:
 	_unmount(home2)
 	var bj: Node = _mount("res://scenes/blackjack.tscn")
 	await _frames(2)
-	bj.call("_on_round_finished", BlackjackEngine.Outcome.WIN, 100)
+	bj.call("_on_round_finished", BlackjackEngine.Outcome.BLACKJACK, 150)
+	bj.call("_on_round_finished", BlackjackEngine.Outcome.LOSE, -50)
 	var st: Dictionary = ProfileStore.get_profile(lila)["stats"]
-	_check(int(st["bj"]["games"]) == 1 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 100, "blackjack solo : résultat enregistré pour Lila")
+	_check(int(st["bj"]["games"]) == 2 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 100, "blackjack solo : résultats enregistrés pour Lila")
+	_check(int(st["bj"]["blackjacks"]) == 1 and int(st["bj"]["losses"]) == 1, "blackjack solo : blackjack et défaite détaillés")
+	_check(ProfileStore.total_net(lila) == 100 and str(ProfileStore.history_values(lila)) == "[150, 100]", "historique de Lila : gains cumulés")
 	_unmount(bj)
+
+	# Options → Statistiques : détail par joueur, avec la courbe des gains cumulés.
+	ProfileStore.create("Noa")
+	var opts: Node = _mount("res://scenes/stats.tscn")
+	await _frames(3)
+	_check(_press(opts, "Statistiques"), "joueur : onglet Statistiques")
+	await _frames(2)
+	_check(_find_button_prefix(opts, "Appareil (tous)") != null and _find_button_prefix(opts, "★ Lila") != null, "joueur : choix du joueur affiché (actif repéré)")
+	_check(not _find_label_text(opts, "GAINS CUMULÉS") and _find_label_text(opts, "Gain net"), "joueur : vue de l'appareil par défaut")
+	_check(_press(opts, "★ Lila"), "joueur : choisir Lila")
+	await _frames(2)
+	_check(_find_label_text(opts, "Gains cumulés") and _find_label_text(opts, "+100"), "joueur : gains cumulés de Lila (+100)")
+	var curves: int = 0
+	for n: Node in opts.find_children("*", "BankChart", true, false):
+		curves += 1
+	_check(curves == 1, "joueur : courbe des gains cumulés")
+	_check(_find_button(opts, "Réinitialiser les stats") == null, "joueur : pas de remise à zéro globale dans la vue joueur")
+	_check(_press(opts, "Noa"), "joueur : choisir Noa")
+	await _frames(2)
+	_check(_find_label_text(opts, "Gains cumulés"), "joueur : Noa sans partie")
+	_check(_press(opts, "Appareil (tous)"), "joueur : retour à la vue de l'appareil")
+	await _frames(2)
+	_check(_find_button(opts, "Réinitialiser les stats") != null, "joueur : vue de l'appareil rétablie")
+	_unmount(opts)
 	LocalSession.names = ["", "", "", "", "", ""]
 	LocalSession.bots = [false, true, false, false, false, false]
 	LocalSession.profile_ids = ["", "", "", "", "", ""]

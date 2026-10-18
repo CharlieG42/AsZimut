@@ -181,7 +181,8 @@ func _banner_kind() -> int:
 
 func _on_round_finished(outcome: int, net: int) -> void:
 	Stats.record_blackjack(outcome, net)
-	ProfileStore.record_active("bj", net > 0, net)
+	var bj_extra: Dictionary = {"blackjacks": 1} if outcome == BlackjackEngine.Outcome.BLACKJACK else {}
+	ProfileStore.record_active("bj", net > 0, net, -1, bj_extra)
 	if engine.has_split and net > 0:
 		Stats.record_split_win()
 	Stats.note_bank(Bankroll.value)

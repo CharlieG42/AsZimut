@@ -1234,9 +1234,35 @@ func _test_active_player() -> void:
 	var st: Dictionary = ProfileStore.get_profile(mia)["stats"]
 	_check(int(st["bj"]["games"]) == 2 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 70, "stats solo : blackjack")
 	_check(int(st["du"]["games"]) == 1 and int(st["du"]["best"]) == 14, "stats solo : Dutch")
+	_check(str(ProfileStore.history_values(mia)) == "[120, 70]" and ProfileStore.total_net(mia) == 70, "historique : gains cumulés après 2 manches (%s)" % str(ProfileStore.history_values(mia)))
+	var bjs: Dictionary = ProfileStore.game_stats(mia, "bj")
+	_check(int(bjs["wins"]) == 1 and int(bjs["losses"]) == 1 and int(bjs["pushes"]) == 0, "stats joueur : victoires / défaites / égalités")
+	ProfileStore.record_active("bj", false, 0)
+	ProfileStore.record_active("bj", true, 150, -1, {"blackjacks": 1})
+	ProfileStore.record_active("pk", true, 300, -1, {"biggest_pot": 600})
+	ProfileStore.record_active("pk", true, 100, -1, {"biggest_pot": 200})
+	ProfileStore.record_active("pk", false, 0, -1, {"splits": 1})
+	bjs = ProfileStore.game_stats(mia, "bj")
+	var pks: Dictionary = ProfileStore.game_stats(mia, "pk")
+	_check(int(bjs["pushes"]) == 1 and int(bjs["blackjacks"]) == 1 and int(bjs["net"]) == 220, "stats joueur : égalité et blackjack")
+	_check(int(pks["biggest_pot"]) == 600 and int(pks["splits"]) == 1 and int(pks["pushes"]) == 1, "stats joueur : plus gros pot et parts égales")
+	_check(ProfileStore.total_net(mia) == 620 and ProfileStore.history_values(mia).size() == 7, "historique : cumul blackjack + poker (%d)" % ProfileStore.total_net(mia))
+	# Un profil ancien (sans historique) reprend ses gains passés comme point de départ.
+	var old: String = ProfileStore.create("Vieux")
+	var old_p: Dictionary = ProfileStore.get_profile(old)
+	old_p["stats"] = {"bj": {"games": 3, "wins": 1, "net": 500}, "pk": {"games": 1, "wins": 0, "net": -100}, "du": {"games": 0, "wins": 0, "best": -1}}
+	ProfileStore.set_active(old)
+	ProfileStore.record_active("bj", true, 50)
+	_check(str(ProfileStore.history_values(old)) == "[450]", "historique : repart des gains déjà comptés")
+	_check(int(ProfileStore.game_stats(old, "pk")["biggest_pot"]) == 0, "stats joueur : clés manquantes à 0")
+	# Plafond de l'historique.
+	for i: int in ProfileStore.HISTORY_MAX + 20:
+		ProfileStore.record_active("bj", true, 1)
+	var capped: Array[int] = ProfileStore.history_values(old)
+	_check(capped.size() == ProfileStore.HISTORY_MAX and capped[capped.size() - 1] == 450 + ProfileStore.HISTORY_MAX + 20, "historique : plafonné et cumul exact")
 	ProfileStore.set_active("")
 	ProfileStore.record_active("bj", true, 999)
-	_check(int(ProfileStore.get_profile(mia)["stats"]["bj"]["games"]) == 2, "stats solo : invité non enregistré")
+	_check(int(ProfileStore.get_profile(mia)["stats"]["bj"]["games"]) == int(bjs["games"]), "stats solo : invité non enregistré")
 
 	# Suppression du joueur actif et import.
 	ProfileStore.set_active(tom)
