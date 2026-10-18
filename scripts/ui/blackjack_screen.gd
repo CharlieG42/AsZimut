@@ -10,6 +10,10 @@ var _bank: CoinLabel
 var _dealer_row: CardRow
 var _player_row: CardRow
 var _dealer_total: PanelContainer
+var _player_label: Label
+var _split_box: VBoxContainer
+var _split_row: CardRow
+var _split_label: Label
 var _player_total: PanelContainer
 var _message_panel: PanelContainer
 var _message_label: Label
@@ -93,9 +97,19 @@ func _build_felt() -> Control:
 
 	_player_row = CardRow.new(1.0, 2)
 	col.add_child(_player_row)
-	col.add_child(UIKit.label("VOUS", 12, UIKit.TEXT_SOFT, true))
+	_player_label = UIKit.label("VOUS", 12, UIKit.TEXT_SOFT, true)
+	col.add_child(_player_label)
 	_player_total = UIKit.chip("0")
 	col.add_child(_centered(_player_total))
+
+	_split_box = VBoxContainer.new()
+	_split_box.add_theme_constant_override("separation", 6)
+	_split_row = CardRow.new(1.0, 2)
+	_split_box.add_child(_split_row)
+	_split_label = UIKit.label("MAIN 2", 12, UIKit.TEXT_SOFT, true)
+	_split_box.add_child(_split_label)
+	_split_box.visible = false
+	col.add_child(_split_box)
 
 	_message_panel = PanelContainer.new()
 	_message_panel.add_theme_stylebox_override("panel", UIKit.banner_style(UIKit.Banner.NEUTRAL))
@@ -119,6 +133,19 @@ func _refresh() -> void:
 	var hide_flags: Array[bool] = [false, not engine.revealed]
 	_dealer_row.set_cards(engine.dealer, hide_flags)
 	_player_row.set_cards(engine.player)
+	_split_box.visible = engine.has_split
+	if engine.has_split:
+		_split_row.set_cards(engine.split_hand)
+		var playing: bool = engine.phase == BlackjackEngine.Phase.PLAYER
+		var mark1: String = "  ◀ en jeu" if playing and engine.active_hand == 0 else ""
+		var mark2: String = "  ◀ en jeu" if playing and engine.active_hand == 1 else ""
+		_player_label.text = "MAIN 1 · %d · mise %d%s" % [BlackjackEngine.bj_value(engine.player), engine.bet, mark1]
+		_split_label.text = "MAIN 2 · %d · mise %d%s" % [BlackjackEngine.bj_value(engine.split_hand), engine.split_bet, mark2]
+		_player_label.add_theme_color_override("font_color", UIKit.GOLD if mark1 != "" else UIKit.TEXT_SOFT)
+		_split_label.add_theme_color_override("font_color", UIKit.GOLD if mark2 != "" else UIKit.TEXT_SOFT)
+	else:
+		_player_label.text = "VOUS"
+		_player_label.add_theme_color_override("font_color", UIKit.TEXT_SOFT)
 
 	_dealer_total.get_parent().visible = not engine.dealer.is_empty()
 	if not engine.dealer.is_empty():
@@ -126,7 +153,7 @@ func _refresh() -> void:
 		if not engine.revealed:
 			shown = [engine.dealer[0]]
 		UIKit.chip_label(_dealer_total).text = str(BlackjackEngine.bj_value(shown))
-	_player_total.get_parent().visible = not engine.player.is_empty()
+	_player_total.get_parent().visible = not engine.player.is_empty() and not engine.has_split
 	if not engine.player.is_empty():
 		UIKit.chip_label(_player_total).text = str(BlackjackEngine.bj_value(engine.player))
 
@@ -172,9 +199,15 @@ func _rebuild_controls() -> void:
 			_controls.add_child(_build_bet_panel())
 		BlackjackEngine.Phase.PLAYER:
 			if Stats.beginner:
-				var advice: String = BlackjackAdvisor.explain(engine.player, engine.dealer[0], engine.can_double())
+				var advice: String = BlackjackAdvisor.explain(engine.current_hand(), engine.dealer[0], engine.can_double())
+				if engine.can_split() and BlackjackAdvisor.should_split(engine.player, engine.dealer[0]):
+					advice = BlackjackAdvisor.explain_split(engine.player, engine.dealer[0])
 				_controls.add_child(UIKit.advice_panel(advice))
 			_controls.add_child(_build_action_buttons())
+		BlackjackEngine.Phase.INSURANCE:
+			if Stats.beginner:
+				_controls.add_child(UIKit.advice_panel(BlackjackAdvisor.insurance_advice()))
+			_controls.add_child(_build_insurance())
 		BlackjackEngine.Phase.DEALER:
 			var wait: Label = UIKit.label("Le croupier joue…", 16, UIKit.TEXT_SOFT)
 			wait.custom_minimum_size = Vector2(0, 56)
@@ -251,6 +284,29 @@ func _build_action_buttons() -> Control:
 	dbl.disabled = not engine.can_double()
 	dbl.pressed.connect(engine.double_down)
 	row.add_child(dbl)
+	if not engine.can_split():
+		return row
+	var col: VBoxContainer = VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	col.add_child(row)
+	var split_btn: Button = UIKit.outline_button("Séparer la paire (+%d)" % engine.bet, UIKit.GOLD, 17)
+	split_btn.pressed.connect(engine.split)
+	col.add_child(split_btn)
+	return col
+
+
+func _build_insurance() -> Control:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var take: Button = UIKit.button("Assurance (%d)" % engine.insurance_cost(), Color(0.2, 0.33, 0.28))
+	take.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	take.disabled = not engine.can_insure()
+	take.pressed.connect(engine.take_insurance)
+	row.add_child(take)
+	var no: Button = UIKit.button("Non merci", UIKit.GOLD, UIKit.INK)
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	no.pressed.connect(engine.decline_insurance)
+	row.add_child(no)
 	return row
 
 

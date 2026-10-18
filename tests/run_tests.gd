@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_poker_advisor()
 	_test_bots()
 	_test_dutch()
+	_test_blackjack_split_insurance()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -195,7 +196,7 @@ func _test_blackjack_simulation() -> void:
 			counters["finished"] = int(counters["finished"]) + 1
 			counters["net"] = int(counters["net"]) + n
 	)
-	for _round: int in 400:
+	for _round: int in 3000:
 		if bank.value < 10:
 			bank.set_to(1000)
 		engine.bet = 0
@@ -207,9 +208,17 @@ func _test_blackjack_simulation() -> void:
 		if engine.phase == BlackjackEngine.Phase.BET:
 			ok = false
 			break
+		if engine.phase == BlackjackEngine.Phase.INSURANCE:
+			if rng.randf() < 0.5 and engine.can_insure():
+				engine.take_insurance()
+			else:
+				engine.decline_insurance()
 		var guard: int = 0
 		while engine.phase == BlackjackEngine.Phase.PLAYER and guard < 30:
 			guard += 1
+			if engine.can_split() and rng.randf() < 0.7:
+				engine.split()
+				continue
 			var pick: int = rng.randi() % 3
 			if pick == 0:
 				engine.hit()
@@ -221,6 +230,7 @@ func _test_blackjack_simulation() -> void:
 			engine.dealer_plays()
 		if engine.phase != BlackjackEngine.Phase.DONE or engine.message == "":
 			ok = false
+			printerr("  phase=%d msg=%s" % [engine.phase, engine.message])
 			break
 		# Le gain net annoncé est exactement la variation de la banque.
 		var delta: int = bank.value - before
@@ -229,8 +239,8 @@ func _test_blackjack_simulation() -> void:
 			printerr("  delta=%d net=%d mise=%d msg=%s" % [delta, engine.net, engine.bet, engine.message])
 			break
 		engine.replay()
-	_check(ok, "simulation blackjack (400 tours) cohérente")
-	_check(int(counters["finished"]) == 400, "un signal round_finished par manche (%d)" % int(counters["finished"]))
+	_check(ok, "simulation blackjack (3000 tours, split et assurance) cohérente")
+	_check(int(counters["finished"]) == 3000, "un signal round_finished par manche (%d)" % int(counters["finished"]))
 	_check(bank.value >= 0, "banque jamais négative")
 	bank.free()
 
@@ -935,3 +945,84 @@ func _test_dutch() -> void:
 		if steps >= 20000:
 			anomalies += 1
 	_check(anomalies == 0, "dutch : parties 100 %% ZIA terminées et cohérentes (%d)" % anomalies)
+
+
+func _bj_rigged(player_cards: Array, dealer_cards: Array, draws: Array) -> BlackjackEngine:
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	var e: BlackjackEngine = BlackjackEngine.new(bank)
+	# deal() dépile par la fin : joueur, joueur, croupier, croupier, puis les tirages.
+	var deck: Array[int] = []
+	for _i: int in 20:
+		deck.append(Cards.make(2, 3))
+	for i: int in range(draws.size() - 1, -1, -1):
+		deck.append(int(draws[i]))
+	deck.append(int(dealer_cards[1]))
+	deck.append(int(dealer_cards[0]))
+	deck.append(int(player_cards[1]))
+	deck.append(int(player_cards[0]))
+	e.deck = deck
+	e.add_to_bet(100)
+	e.deal()
+	return e
+
+
+func _test_blackjack_split_insurance() -> void:
+	var C: int = Cards.Suit.CLUBS
+	var H: int = Cards.Suit.HEARTS
+	# Paire de 8 contre un 6 : split, puis les deux mains gagnent contre un croupier qui crève.
+	var e: BlackjackEngine = _bj_rigged(
+		[Cards.make(8, C), Cards.make(8, H)], [Cards.make(6, C), Cards.make(10, H)],
+		[Cards.make(3, C), Cards.make(2, H), Cards.make(9, C)]
+	)
+	_check(e.phase == BlackjackEngine.Phase.PLAYER and e.can_split(), "split proposé sur une paire")
+	_check(BlackjackAdvisor.should_split(e.player, e.dealer[0]), "conseil : séparer les 8")
+	var bank_before: int = e._bankroll.value
+	e.split()
+	_check(e.has_split and e.player.size() == 2 and e.split_hand.size() == 2, "split : deux mains de deux cartes")
+	_check(e._bankroll.value == bank_before - 100 and e.split_bet == 100, "split : seconde mise prélevée")
+	_check(e.active_hand == 0 and e.can_double(), "split : double possible sur la main 1")
+	e.stand()
+	_check(e.active_hand == 1 and e.phase == BlackjackEngine.Phase.PLAYER, "split : main 2 en jeu")
+	e.stand()
+	_check(e.phase == BlackjackEngine.Phase.DEALER, "split : au croupier")
+	e.dealer_plays()
+	_check(e.phase == BlackjackEngine.Phase.DONE and e.outcome == BlackjackEngine.Outcome.WIN and e.net == 200, "split : deux mains gagnées (+200) — %s" % e.message)
+
+	# As séparés : une carte chacun, puis le croupier.
+	var a: BlackjackEngine = _bj_rigged(
+		[Cards.make(14, C), Cards.make(14, H)], [Cards.make(9, C), Cards.make(10, H)],
+		[Cards.make(13, C), Cards.make(5, H)]
+	)
+	a.split()
+	_check(a.phase == BlackjackEngine.Phase.DEALER and a.player.size() == 2 and a.split_hand.size() == 2, "As séparés : une carte chacun")
+	a.dealer_plays()
+	_check(a.outcome == BlackjackEngine.Outcome.PUSH and a.net == 0, "As séparés : 21 (non blackjack) gagne, 16 perd → 0 — %s" % a.message)
+
+	# Pas de split sur deux cartes différentes
+	var n: BlackjackEngine = _bj_rigged([Cards.make(8, C), Cards.make(9, H)], [Cards.make(6, C), Cards.make(10, H)], [])
+	_check(not n.can_split(), "pas de split sans paire")
+	var t: BlackjackEngine = _bj_rigged([Cards.make(13, C), Cards.make(12, H)], [Cards.make(6, C), Cards.make(10, H)], [])
+	_check(t.can_split() and not BlackjackAdvisor.should_split(t.player, t.dealer[0]), "roi + dame séparables mais déconseillé")
+
+	# Assurance gagnante : le croupier a blackjack.
+	var i1: BlackjackEngine = _bj_rigged([Cards.make(10, C), Cards.make(9, H)], [Cards.make(14, C), Cards.make(13, H)], [])
+	_check(i1.phase == BlackjackEngine.Phase.INSURANCE and i1.insurance_cost() == 50, "assurance proposée contre un As")
+	i1.take_insurance()
+	_check(i1.phase == BlackjackEngine.Phase.DONE and i1.revealed and i1.net == 0, "assurance : blackjack du croupier, opération blanche")
+	_check(i1._bankroll.value == 1000, "assurance : banque intacte")
+
+	# Assurance perdue : le croupier n'a pas blackjack, la partie continue.
+	var i2: BlackjackEngine = _bj_rigged([Cards.make(10, C), Cards.make(9, H)], [Cards.make(14, C), Cards.make(5, H)], [Cards.make(10, C)])
+	i2.take_insurance()
+	_check(i2.phase == BlackjackEngine.Phase.PLAYER and i2.insurance == 50, "assurance perdue : on continue")
+	i2.stand()
+	i2.dealer_plays()
+	# Croupier : A+5+10 = 16 → tire encore (2 de remplissage) = 18 ; joueur 19 gagne 100, assurance -50.
+	_check(i2.net == 50, "assurance perdue déduite du gain (net %d) — %s" % [i2.net, i2.message])
+
+	# Refus de l'assurance avec blackjack du croupier : mise perdue
+	var i3: BlackjackEngine = _bj_rigged([Cards.make(10, C), Cards.make(9, H)], [Cards.make(14, C), Cards.make(12, H)], [])
+	i3.decline_insurance()
+	_check(i3.outcome == BlackjackEngine.Outcome.LOSE and i3.net == -100, "sans assurance : blackjack du croupier, mise perdue")

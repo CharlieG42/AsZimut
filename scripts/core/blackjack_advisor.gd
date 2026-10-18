@@ -130,3 +130,44 @@ static func explain(hand: Array[int], up_card: int, can_double: bool) -> String:
 				"Tirez : le croupier montre un %s (carte forte). "
 				+ "Avec %d, rester vous ferait perdre le plus souvent."
 			) % [up_text, total]
+
+
+## Stratégie de base pour une paire (double autorisé après split).
+static func should_split(hand: Array[int], up_card: int) -> bool:
+	if hand.size() != 2:
+		return false
+	var r1: int = Cards.rank_of(hand[0])
+	var r2: int = Cards.rank_of(hand[1])
+	var v: int = 11 if r1 == 14 else mini(r1, 10)
+	var v2: int = 11 if r2 == 14 else mini(r2, 10)
+	if v != v2:
+		return false
+	var up: int = up_value(up_card)
+	match v:
+		11, 8:
+			return true
+		10, 5:
+			return false
+		9:
+			return up <= 9 and up != 7
+		7, 2, 3:
+			return up <= 7
+		6:
+			return up <= 6
+		4:
+			return up == 5 or up == 6
+	return false
+
+
+static func explain_split(hand: Array[int], up_card: int) -> String:
+	var r: int = Cards.rank_of(hand[0])
+	var up_text: String = _up_name(up_value(up_card))
+	if r == 14:
+		return "Séparez vos As : chaque As devient le début d'une main forte."
+	if r == 8:
+		return "Séparez vos 8 : 16 est la pire main, deux mains de 8 sont bien meilleures."
+	return "Séparez cette paire contre un %s du croupier : deux mains valent mieux qu'une ici." % up_text
+
+
+static func insurance_advice() -> String:
+	return "Refusez l'assurance : le croupier n'a blackjack qu'environ une fois sur trois, elle coûte plus qu'elle ne rapporte."

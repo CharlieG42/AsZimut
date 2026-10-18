@@ -43,7 +43,7 @@ static func blackjack_sections() -> Array[Dictionary]:
 		{
 			"title": "Une manche",
 			"text":
-			"1. Misez avec les jetons puis validez.\n2. Vous recevez 2 cartes, le croupier en montre une.\n3. À vous : « Carte » pour tirer, « Rester » pour garder votre main, « Doubler » pour doubler la mise et recevoir une seule carte.\n4. Le croupier tire jusqu'à 17, puis on compare.",
+			"1. Misez avec les jetons puis validez.\n2. Vous recevez 2 cartes, le croupier en montre une.\n3. À vous : « Carte » pour tirer, « Rester » pour garder votre main, « Doubler » pour doubler la mise et recevoir une seule carte.\n   Avec une paire, « Séparer » en fait deux mains (même mise sur chacune ; As séparés : une carte chacun).\n   Si le croupier montre un As, il propose une assurance (moitié de la mise, payée 2 contre 1 s'il a blackjack).\n4. Le croupier tire jusqu'à 17, puis on compare.",
 		},
 		{
 			"title": "Gains",

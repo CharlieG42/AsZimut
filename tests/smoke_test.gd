@@ -145,6 +145,12 @@ func _test_blackjack(bank: BankrollState) -> void:
 		await _frames(1)
 		_check(_press(screen, "Distribuer"), "bouton Distribuer")
 		await _frames(2)
+		if engine.phase == BlackjackEngine.Phase.INSURANCE:
+			_check(_press(screen, "Non merci"), "refus de l'assurance")
+			await _frames(1)
+		if engine.can_split():
+			_check(_press(screen, "Séparer la paire (+25)"), "bouton Séparer")
+			await _frames(1)
 		var guard: int = 0
 		while engine.phase == BlackjackEngine.Phase.PLAYER and guard < 10:
 			guard += 1
