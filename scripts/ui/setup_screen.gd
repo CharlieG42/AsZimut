@@ -7,6 +7,7 @@ var _content: VBoxContainer
 func _ready() -> void:
 	LocalSession.solo = false
 	LocalSession.solo_poker = false
+	_seat_active_player()
 	add_child(UIKit.background())
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -25,6 +26,17 @@ func _ready() -> void:
 
 	_rebuild()
 	UIKit.fade_in(self)
+
+
+## Le joueur actif (celui du solo) prend le premier siège s'il est libre et qu'il n'est pas déjà à table.
+func _seat_active_player() -> void:
+	var pid: String = ProfileStore.active_id()
+	if pid == "" or _seat_of(pid) >= 0:
+		return
+	if LocalSession.bots[0] or LocalSession.profile_ids[0] != "" or LocalSession.names[0].strip_edges() != "":
+		return
+	LocalSession.profile_ids[0] = pid
+	LocalSession.names[0] = ProfileStore.name_of(pid)
 
 
 func _rebuild() -> void:

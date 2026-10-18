@@ -70,6 +70,7 @@ Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.jso
   contre ZIA (ou « invité » sans profil). Le joueur actif donne son nom à la table (Blackjack, Poker, Dutch), sa banque
   personnelle devient la banque solo (la banque d'invité est conservée à part) et ses résultats solo s'ajoutent à ses
   statistiques. Le premier joueur créé depuis l'écran Joueurs devient actif ; il est inclus dans la sauvegarde.
+  En multijoueur local, le joueur actif est placé d'office au premier siège (retirable d'un appui).
 
 ### Sauvegarde : export / import
 Options → **Sauvegarde des données** :

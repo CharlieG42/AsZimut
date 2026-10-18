@@ -1067,6 +1067,15 @@ func _test_active_ui(bank: BankrollState) -> void:
 	var st: Dictionary = ProfileStore.get_profile(lila)["stats"]
 	_check(int(st["bj"]["games"]) == 1 and int(st["bj"]["wins"]) == 1 and int(st["bj"]["net"]) == 100, "blackjack solo : résultat enregistré pour Lila")
 	_unmount(bj)
+	LocalSession.names = ["", "", "", "", "", ""]
+	LocalSession.bots = [false, true, false, false, false, false]
+	LocalSession.profile_ids = ["", "", "", "", "", ""]
+	var setup: Node = _mount("res://scenes/setup.tscn")
+	await _frames(2)
+	_check(LocalSession.profile_ids[0] == lila and LocalSession.names[0] == "Lila", "multijoueur : le joueur actif prend le siège 1")
+	_unmount(setup)
+	LocalSession.names = ["", "", "", "", "", ""]
+	LocalSession.profile_ids = ["", "", "", "", "", ""]
 	LocalSession.start_solo_dutch()
 	var dutch: Node = _mount("res://scenes/dutch.tscn")
 	await _frames(2)
