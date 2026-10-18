@@ -147,14 +147,29 @@ func _ready() -> void:
 	var stats_btn: Button = UIKit.outline_button("Options & statistiques", UIKit.TEXT_SOFT, 16)
 	stats_btn.pressed.connect(_open.bind(STATS_SCENE))
 	col.add_child(stats_btn)
+	var bottom: HBoxContainer = HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 8)
 	var about_btn: Button = UIKit.outline_button("À propos · v%s" % AppInfo.version(), UIKit.TEXT_SOFT, 13)
+	about_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	about_btn.size_flags_stretch_ratio = 1.6
+	about_btn.clip_text = true
 	about_btn.pressed.connect(_open.bind(ABOUT_SCENE))
-	col.add_child(about_btn)
+	bottom.add_child(about_btn)
+	var quit_btn: Button = UIKit.outline_button("Quitter", UIKit.WARNING_TEXT, 15)
+	quit_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quit_btn.pressed.connect(_quit)
+	bottom.add_child(quit_btn)
+	col.add_child(bottom)
 
 	Bankroll.refresh_profile()
 	Bankroll.changed.connect(_refresh)
 	_refresh()
 	UIKit.fade_in(self)
+
+
+## Ferme l'appli (tout est déjà sauvegardé au fil des parties).
+func _quit() -> void:
+	get_tree().quit()
 
 
 func _open_profiles() -> void:

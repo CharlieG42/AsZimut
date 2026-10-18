@@ -1124,6 +1124,7 @@ func _test_active_ui(bank: BankrollState) -> void:
 	var home: Node = _mount("res://scenes/home.tscn")
 	await _frames(2)
 	_check(_find_button_prefix(home, "Joueur : invité") != null, "accueil : bouton joueur (invité)")
+	_check(_find_button(home, "Quitter") != null, "accueil : bouton Quitter")
 	_unmount(home)
 
 	var prof: Node = _mount("res://scenes/profiles.tscn")
