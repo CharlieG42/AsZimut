@@ -40,6 +40,17 @@ var pk_splits: int = 0
 var pk_net: int = 0
 var pk_biggest_pot: int = 0
 
+# Three Card Poker (contre le croupier)
+var tc_rounds: int = 0
+var tc_wins: int = 0
+var tc_losses: int = 0
+var tc_pushes: int = 0
+var tc_folds: int = 0
+var tc_net: int = 0
+var tc_pair_plus_wins: int = 0
+var tc_trips: int = 0
+var tc_straight_flushes: int = 0
+
 # Dutch (parties solo contre ZIA)
 var du_games: int = 0
 var du_wins: int = 0
@@ -70,6 +81,9 @@ const ACHIEVEMENTS: Array[Array] = [
 	["pk_big", "Gros pot", "Remporter un pot d'au moins 1000 jetons."],
 	["pk_hundred", "Cent mains", "Jouer 100 mains de poker en face-à-face."],
 	["pk_table", "Dernier debout", "Gagner une table de poker solo à plusieurs."],
+	["tc_first", "Premier Three Card", "Gagner une manche de Three Card Poker."],
+	["tc_pair_plus", "Pair Plus", "Gagner un Pair Plus au Three Card Poker."],
+	["tc_sf", "Quinte flush", "Recevoir une quinte flush au Three Card Poker."],
 	["du_first", "Premier Dutch", "Gagner une partie de Dutch contre ZIA."],
 	["du_call", "Annonce gagnante", "Annoncer DUTCH et avoir la main la plus faible."],
 	["du_low", "Main parfaite", "Finir une manche de Dutch avec 3 points ou moins."],
@@ -79,6 +93,8 @@ const ACHIEVEMENTS: Array[Array] = [
 const _STAT_KEYS: Array[String] = [
 	"bj_rounds", "bj_wins", "bj_losses", "bj_pushes", "bj_blackjacks", "bj_net",
 	"pk_hands", "pk_wins", "pk_losses", "pk_splits", "pk_net", "pk_biggest_pot",
+	"tc_rounds", "tc_wins", "tc_losses", "tc_pushes", "tc_folds", "tc_net",
+	"tc_pair_plus_wins", "tc_trips", "tc_straight_flushes",
 	"du_games", "du_wins", "du_rounds", "du_round_wins", "du_calls", "du_call_wins",
 	"bj_split_wins", "pk_table_wins",
 ]
@@ -163,6 +179,27 @@ func record_dutch_match(won: bool) -> void:
 	du_games += 1
 	if won:
 		du_wins += 1
+	_commit()
+
+
+## Fin d'une manche de Three Card Poker : gain net, main reçue, couché ou non, Pair Plus gagné.
+func record_three_card(net: int, hand_category: int, folded: bool, pair_plus_won: bool) -> void:
+	tc_rounds += 1
+	tc_net += net
+	if net > 0:
+		tc_wins += 1
+	elif net < 0:
+		tc_losses += 1
+	else:
+		tc_pushes += 1
+	if folded:
+		tc_folds += 1
+	if pair_plus_won:
+		tc_pair_plus_wins += 1
+	if hand_category == ThreeCardEngine.Hand.THREE_KIND:
+		tc_trips += 1
+	elif hand_category == ThreeCardEngine.Hand.STRAIGHT_FLUSH:
+		tc_straight_flushes += 1
 	_commit()
 
 
@@ -298,6 +335,12 @@ func _achieved(id: String) -> bool:
 			return pk_hands >= 100
 		"pk_table":
 			return pk_table_wins >= 1
+		"tc_first":
+			return tc_wins >= 1
+		"tc_pair_plus":
+			return tc_pair_plus_wins >= 1
+		"tc_sf":
+			return tc_straight_flushes >= 1
 		"du_first":
 			return du_wins >= 1
 		"du_call":

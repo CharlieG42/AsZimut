@@ -2,7 +2,7 @@ class_name HelpContent
 extends RefCounted
 ## Textes d'aide (règles, conseils) partagés par le tutoriel et le bouton « ? ».
 
-enum Topic { BLACKJACK, POKER, DUTCH }
+enum Topic { BLACKJACK, POKER, DUTCH, THREE_CARD }
 
 ## Exemples de mains pour le classement : [nom, description, cartes [rang, couleur]].
 const HANDS: Array[Array] = [
@@ -22,6 +22,8 @@ const HANDS: Array[Array] = [
 static func title(topic: int) -> String:
 	if topic == Topic.DUTCH:
 		return "Dutch"
+	if topic == Topic.THREE_CARD:
+		return "Three Card Poker"
 	return "Blackjack" if topic == Topic.BLACKJACK else "Poker Hold'em"
 
 
@@ -30,6 +32,8 @@ static func sections(topic: int) -> Array[Dictionary]:
 		return blackjack_sections()
 	if topic == Topic.DUTCH:
 		return dutch_sections()
+	if topic == Topic.THREE_CARD:
+		return three_card_sections()
 	return poker_sections()
 
 
@@ -118,6 +122,36 @@ static func dutch_sections() -> Array[Dictionary]:
 	]
 
 
+static func three_card_sections() -> Array[Dictionary]:
+	return [
+		{
+			"title": "But du jeu",
+			"text":
+			"Battre le croupier avec une main de 3 cartes. Contrairement au poker classique, il n'y a ni adversaires ni enchères : vous jouez seul contre la banque.",
+		},
+		{
+			"title": "Une manche",
+			"text":
+			"1. Misez l'Ante (obligatoire) et, si vous le voulez, un Pair Plus (facultatif).\n2. Vous recevez 3 cartes, le croupier aussi (cachées).\n3. Vous décidez : « Jouer » (vous posez une seconde mise égale à l'Ante) ou « Se coucher » (vous perdez l'Ante).\n4. Le croupier dévoile sa main. Il se qualifie avec Dame haute ou mieux.",
+		},
+		{
+			"title": "Classement des mains",
+			"text":
+			"Du plus fort au plus faible :\nQuinte flush (3 cartes qui se suivent, même couleur)\nBrelan (3 cartes identiques)\nQuinte (3 cartes qui se suivent ; A-2-3 est la plus petite)\nCouleur (3 cartes de la même couleur)\nPaire\nHauteur (la plus haute carte)\nAttention : ici, la quinte bat la couleur.",
+		},
+		{
+			"title": "Gains",
+			"text":
+			"Le croupier ne se qualifie pas : l'Ante est payée 1 pour 1, le Jeu vous est rendu.\nLe croupier se qualifie et vous le battez : Ante et Jeu sont payés 1 pour 1.\nÉgalité : tout est rendu. Le croupier gagne : Ante et Jeu sont perdus.\nBonus d'Ante (si vous jouez, même si vous perdez) : quinte 1 pour 1, brelan 4 pour 1, quinte flush 5 pour 1.\nPair Plus (indépendant du croupier) : paire 1 pour 1, couleur 4, quinte 6, brelan 30, quinte flush 40.",
+		},
+		{
+			"title": "Astuces",
+			"text":
+			"Jouez avec Dame-6-4 ou mieux, couchez-vous en dessous : c'est la stratégie qui perd le moins.\nLe Pair Plus paie gros mais rarement : misez-y peu.\nIl faut pouvoir couvrir le Jeu : l'Ante ne peut pas dépasser la moitié de votre banque (moins le Pair Plus).",
+		},
+	]
+
+
 static func app_sections() -> Array[Dictionary]:
 	return [
 		{
@@ -142,9 +176,9 @@ static func app_sections() -> Array[Dictionary]:
 static func tutorial_pages() -> Array[Dictionary]:
 	var welcome: Array[Dictionary] = [
 		{
-			"title": "Trois jeux",
+			"title": "Quatre jeux",
 			"text":
-			"Blackjack contre le croupier, Poker Hold'em contre ZIA, notre IA, et Dutch, un jeu de mémoire sans mise. Votre banque de jetons est commune au blackjack et au poker ; elle se sauvegarde sur l'appareil.",
+			"Blackjack et Three Card Poker contre le croupier, Poker Hold'em contre ZIA, notre IA, et Dutch, un jeu de mémoire sans mise. Votre banque de jetons est commune aux jeux d'argent ; elle se sauvegarde sur l'appareil.",
 		},
 		{
 			"title": "Ce tutoriel",
@@ -156,6 +190,7 @@ static func tutorial_pages() -> Array[Dictionary]:
 	pages.append({"title": "Bienvenue sur AsZimut", "sections": welcome, "hands": false, "beginner": false})
 	pages.append({"title": "Blackjack", "sections": blackjack_sections(), "hands": false, "beginner": false})
 	pages.append({"title": "Poker", "sections": poker_sections(), "hands": false, "beginner": false})
+	pages.append({"title": "Three Card Poker", "sections": three_card_sections(), "hands": false, "beginner": false})
 	pages.append({"title": "Dutch", "sections": dutch_sections(), "hands": false, "beginner": false})
 	pages.append({"title": "Classement des mains", "sections": [], "hands": true, "beginner": false})
 	pages.append({"title": "Jouer à plusieurs, se faire aider", "sections": app_sections(), "hands": false, "beginner": true})

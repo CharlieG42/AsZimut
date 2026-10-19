@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_test_pending_refund()
 	_test_profiles()
 	_test_active_player()
+	_test_three_card()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1275,3 +1276,166 @@ func _test_active_player() -> void:
 	_check(ProfileStore.active_id() == tom, "import : joueur actif restauré")
 	bank.free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+
+
+func _tc(spec: Array) -> Array[int]:
+	var out: Array[int] = []
+	for pair: Variant in spec:
+		out.append(Cards.make(int((pair as Array)[0]), int((pair as Array)[1])))
+	return out
+
+
+## Distribue des mains choisies : le joueur reçoit `p`, le croupier `d` (la pioche se prend par la fin).
+func _tc_round(bank: BankrollState, p: Array, d: Array, ante: int, pair_plus: int, play: bool) -> ThreeCardEngine:
+	var e: ThreeCardEngine = ThreeCardEngine.new(bank)
+	var cards_p: Array[int] = _tc(p)
+	var cards_d: Array[int] = _tc(d)
+	var deck: Array[int] = []
+	for i: int in 6:
+		deck.append(i)
+	for i: int in range(2, -1, -1):
+		deck.append(cards_d[i])
+	for i: int in range(2, -1, -1):
+		deck.append(cards_p[i])
+	e.deck = deck
+	e.add_ante(ante)
+	if pair_plus > 0:
+		e.add_pair_plus(pair_plus)
+	e.deal()
+	if play:
+		e.play()
+	else:
+		e.fold()
+	return e
+
+
+func _test_three_card() -> void:
+	var H: Dictionary = {"sf": ThreeCardEngine.Hand.STRAIGHT_FLUSH, "tk": ThreeCardEngine.Hand.THREE_KIND, "st": ThreeCardEngine.Hand.STRAIGHT, "fl": ThreeCardEngine.Hand.FLUSH, "pr": ThreeCardEngine.Hand.PAIR, "hc": ThreeCardEngine.Hand.HIGH_CARD}
+	var ev: Callable = func(spec: Array) -> Array[int]: return ThreeCardEngine.evaluate(_tc(spec))
+	_check(ev.call([[10, 0], [11, 0], [12, 0]])[0] == H["sf"], "3 cartes : quinte flush")
+	_check(ev.call([[7, 1], [7, 2], [7, 3]])[0] == H["tk"], "3 cartes : brelan")
+	_check(ev.call([[4, 0], [5, 1], [6, 2]])[0] == H["st"], "3 cartes : quinte")
+	_check(ev.call([[2, 3], [9, 3], [13, 3]])[0] == H["fl"], "3 cartes : couleur")
+	_check(ev.call([[9, 0], [9, 1], [2, 2]])[0] == H["pr"] and ev.call([[2, 2], [9, 0], [9, 1]])[1] == 9, "3 cartes : paire (rang et ordre)")
+	_check(ev.call([[14, 0], [9, 1], [2, 2]])[0] == H["hc"], "3 cartes : hauteur")
+	var a23: Array[int] = ev.call([[14, 0], [2, 1], [3, 2]])
+	var k_q_a: Array[int] = ev.call([[14, 0], [13, 1], [12, 2]])
+	var s234: Array[int] = ev.call([[2, 0], [3, 1], [4, 2]])
+	_check(a23[0] == H["st"] and a23[1] == 3, "A-2-3 : la plus petite quinte")
+	_check(ThreeCardEngine.compare(s234, a23) > 0 and ThreeCardEngine.compare(k_q_a, s234) > 0, "quintes : A-K-Q > 2-3-4 > A-2-3")
+	var flush: Array[int] = ev.call([[14, 3], [9, 3], [5, 3]])
+	_check(ThreeCardEngine.compare(a23, flush) > 0, "ici la quinte bat la couleur")
+	var pair_k: Array[int] = ev.call([[13, 0], [13, 1], [3, 2]])
+	var pair_k_hi: Array[int] = ev.call([[13, 2], [13, 3], [9, 0]])
+	_check(ThreeCardEngine.compare(pair_k_hi, pair_k) > 0 and ThreeCardEngine.compare(pair_k, pair_k) == 0, "paires : le kicker départage")
+	_check(not ThreeCardEngine.dealer_qualifies(_tc([[11, 0], [9, 1], [5, 2]])), "croupier : valet haute ne se qualifie pas")
+	_check(ThreeCardEngine.dealer_qualifies(_tc([[12, 0], [5, 1], [3, 2]])), "croupier : dame haute se qualifie")
+	_check(ThreeCardEngine.dealer_qualifies(_tc([[2, 0], [2, 1], [5, 2]])), "croupier : une paire se qualifie")
+	_check(ThreeCardEngine.hand_name(_tc([[12, 0], [12, 1], [5, 2]])) == "paire de dames", "nom de la main")
+
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	var pre: int = bank.value
+	# Le joueur bat un croupier qualifié : Ante et Jeu payés 1 pour 1.
+	var e: ThreeCardEngine = _tc_round(bank, [[13, 0], [9, 1], [4, 2]], [[12, 0], [8, 1], [3, 2]], 50, 0, true)
+	_check(e.net == 100 and bank.value == pre + 100 and bank.pending == 0, "gain : victoire (+100, banque %d)" % bank.value)
+	# Croupier non qualifié : Ante payée, Jeu rendu.
+	pre = bank.value
+	e = _tc_round(bank, [[9, 0], [6, 1], [4, 2]], [[11, 0], [8, 1], [3, 2]], 50, 0, true)
+	_check(e.net == 50 and not e.dealer_qualified and bank.value == pre + 50, "gain : croupier non qualifié (+50)")
+	# Croupier gagne.
+	pre = bank.value
+	e = _tc_round(bank, [[9, 0], [6, 1], [4, 2]], [[13, 0], [8, 1], [3, 2]], 50, 0, true)
+	_check(e.net == -100 and bank.value == pre - 100, "perte : le croupier gagne (-100)")
+	# Égalité parfaite : tout est rendu.
+	pre = bank.value
+	e = _tc_round(bank, [[12, 0], [9, 1], [8, 2]], [[12, 1], [9, 0], [8, 3]], 50, 0, true)
+	_check(e.net == 0 and bank.value == pre, "égalité : mises rendues")
+	# Se coucher : seule l'Ante est perdue.
+	pre = bank.value
+	e = _tc_round(bank, [[9, 0], [6, 1], [4, 2]], [[13, 0], [8, 1], [3, 2]], 50, 0, false)
+	_check(e.net == -50 and e.folded and bank.value == pre - 50, "coucher : Ante perdue (-50)")
+	# Pair Plus : payé même si on se couche.
+	pre = bank.value
+	e = _tc_round(bank, [[7, 0], [7, 1], [2, 2]], [[13, 0], [8, 1], [3, 2]], 50, 10, false)
+	_check(e.net == -40 and e.pair_plus_won and bank.value == pre - 40, "Pair Plus : paire payée 1 pour 1 même couché (-40)")
+	# Bonus d'Ante avec une quinte battue par un croupier meilleur : bonus payé, Ante et Jeu perdus.
+	pre = bank.value
+	e = _tc_round(bank, [[4, 0], [5, 1], [6, 2]], [[10, 3], [11, 3], [12, 3]], 50, 0, true)
+	_check(e.net == -50 and bank.value == pre - 50, "bonus d'Ante : quinte payée 1 pour 1 malgré la défaite (-50)")
+	# Brelan : bonus 4 pour 1 + victoire + Pair Plus 30 pour 1.
+	pre = bank.value
+	e = _tc_round(bank, [[8, 0], [8, 1], [8, 2]], [[13, 0], [8 + 1, 1], [3, 2]], 50, 10, true)
+	# Ante 50 + Jeu 50 + Pair Plus 10 = 110 misés ; reçus : Pair Plus 310 + bonus 200 + (100+100) = 710.
+	_check(e.net == 600 and bank.value == pre + 600, "brelan : bonus d'Ante et Pair Plus (+600, net %d)" % e.net)
+	# Limites de mise : il faut pouvoir couvrir le Jeu.
+	bank.value = 1000
+	var lim: ThreeCardEngine = ThreeCardEngine.new(bank)
+	lim.add_ante(500)
+	lim.add_pair_plus(10)
+	_check(lim.ante == 500 and lim.pair_plus == 0 and lim.can_deal(), "mises : l'Ante ne dépasse pas la moitié de la banque")
+	lim.add_ante(10)
+	_check(lim.ante == 500, "mises : Ante plafonnée")
+	var poor: BankrollState = BankrollState.new()
+	poor.persist = false
+	poor.value = 15
+	var pe: ThreeCardEngine = ThreeCardEngine.new(poor)
+	pe.add_ante(10)
+	_check(pe.ante == 0 and not pe.can_deal(), "mises : banque trop faible pour l'Ante minimale")
+	poor.free()
+	# Conservation de la banque sur de nombreuses manches (décisions au hasard).
+	bank.value = 5000
+	var sim: ThreeCardEngine = ThreeCardEngine.new(bank)
+	sim.rng.seed = 99
+	var sum_net: int = 0
+	var start: int = bank.value
+	var rounds: int = 0
+	while rounds < 400 and bank.value >= 30:
+		sim.add_ante(10)
+		sim.add_pair_plus(10) if rounds % 3 == 0 else sim.clear_pair_plus()
+		sim.deal()
+		if sim.rng.randf() < 0.7:
+			sim.play()
+		else:
+			sim.fold()
+		sum_net += sim.net
+		rounds += 1
+		sim.replay()
+	_check(bank.value == start + sum_net and bank.pending == 0, "400 manches : banque cohérente (%d manches, %+d)" % [rounds, sum_net])
+	# Conseil du mode débutant.
+	_check(ThreeCardAdvisor.should_play(_tc([[12, 0], [6, 1], [4, 2]])), "conseil : Dame-6-4 se joue")
+	_check(not ThreeCardAdvisor.should_play(_tc([[12, 0], [6, 1], [3, 2]])), "conseil : Dame-6-3 se couche")
+	_check(ThreeCardAdvisor.should_play(_tc([[13, 0], [3, 1], [2, 2]])), "conseil : Roi haute se joue")
+	_check(not ThreeCardAdvisor.should_play(_tc([[11, 0], [10, 1], [8, 2]])), "conseil : Valet haute se couche")
+	_check(ThreeCardAdvisor.should_play(_tc([[2, 0], [2, 1], [5, 2]])), "conseil : une paire se joue")
+	# Statistiques globales et par joueur.
+	var st: StatsState = StatsState.new()
+	st.persist = false
+	st.record_three_card(100, ThreeCardEngine.Hand.PAIR, false, true)
+	st.record_three_card(-50, ThreeCardEngine.Hand.HIGH_CARD, true, false)
+	st.record_three_card(0, ThreeCardEngine.Hand.STRAIGHT_FLUSH, false, false)
+	_check(st.tc_rounds == 3 and st.tc_wins == 1 and st.tc_losses == 1 and st.tc_pushes == 1 and st.tc_net == 50, "stats Three Card : manches, victoires, net")
+	_check(st.tc_folds == 1 and st.tc_pair_plus_wins == 1 and st.tc_straight_flushes == 1, "stats Three Card : couchés, Pair Plus, quinte flush")
+	_check(st.has_achievement("tc_first") and st.has_achievement("tc_pair_plus") and st.has_achievement("tc_sf"), "succès Three Card")
+	var back: StatsState = StatsState.new()
+	back.persist = false
+	back.load_dict(st.to_dict())
+	_check(back.tc_rounds == 3 and back.tc_net == 50, "sauvegarde : stats Three Card exportées")
+	st.free()
+	back.free()
+	ProfileStore.path = "user://test_profiles_tc.json"
+	if FileAccess.file_exists(ProfileStore.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	ProfileStore.reload()
+	var zoe: String = ProfileStore.create("Zoé")
+	ProfileStore.set_active(zoe)
+	ProfileStore.record_active("tc", true, 120, -1, {"pair_plus_wins": 1})
+	ProfileStore.record_active("tc", false, -50, -1, {"folds": 1})
+	var tcs: Dictionary = ProfileStore.game_stats(zoe, "tc")
+	_check(int(tcs["games"]) == 2 and int(tcs["wins"]) == 1 and int(tcs["losses"]) == 1 and int(tcs["folds"]) == 1 and int(tcs["pair_plus_wins"]) == 1 and int(tcs["net"]) == 70, "joueur : stats Three Card")
+	_check(ProfileStore.total_net(zoe) == 70, "joueur : gains cumulés incluent Three Card")
+	_check(ProfileStore.summary(zoe)[0].begins_with("Three Card"), "joueur : résumé Three Card")
+	ProfileStore.set_active("")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	bank.free()

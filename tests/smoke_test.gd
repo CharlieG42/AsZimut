@@ -80,6 +80,7 @@ func _run() -> void:
 	await _test_achievements(stats, bank)
 	await _test_profiles_ui()
 	await _test_active_ui(bank)
+	await _test_three_card_ui(stats, bank)
 	await _test_backup(stats, bank)
 	GameSave.clear()
 
@@ -566,11 +567,11 @@ func _test_tutorial_and_options(stats: StatsState) -> void:
 	_check(title.text == "Bienvenue sur AsZimut", "première page du tutoriel")
 	_check(_find_button(tuto, "Précédent") == null, "pas de « Précédent » sur la première page")
 	var seen: Array[String] = [title.text]
-	for _i: int in 5:
+	for _i: int in 6:
 		_check(_press(tuto, "Suivant"), "page suivante")
 		await _frames(2)
 		seen.append(title.text)
-	_check(seen.has("Blackjack") and seen.has("Poker") and seen.has("Dutch"), "pages Blackjack, Poker et Dutch")
+	_check(seen.has("Blackjack") and seen.has("Poker") and seen.has("Dutch") and seen.has("Three Card Poker"), "pages Blackjack, Poker, Three Card Poker et Dutch")
 	_check(seen.has("Classement des mains"), "page classement des mains")
 	_check(_find_button(tuto, "Commencer") != null, "dernière page : « Commencer »")
 	_check(_find_button(tuto, "Mode débutant (conseils pendant la partie)") == null, "libellé distinct sur la dernière page")
@@ -1209,6 +1210,95 @@ func _test_active_ui(bank: BankrollState) -> void:
 	bank.use_profile("")
 	bank.value = 1000
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+
+
+func _test_three_card_ui(stats: StatsState, bank: BankrollState) -> void:
+	bank.use_profile("")
+	bank.set_to(1000)
+	stats.reset_stats()
+	var home: Node = _mount("res://scenes/home.tscn")
+	await _frames(2)
+	var tiles: int = 0
+	for n: Node in home.find_children("*", "GameCard", true, false):
+		tiles += 1
+	_check(tiles == 4, "accueil : quatre jeux (%d)" % tiles)
+	_unmount(home)
+
+	var screen: Node = _mount("res://scenes/three_card.tscn")
+	await _frames(3)
+	var e: ThreeCardEngine = screen.get("engine") as ThreeCardEngine
+	_check(e != null and e.phase == ThreeCardEngine.Phase.BET, "three card : moteur en phase de mise")
+	var deal: Button = _find_button(screen, "Distribuer")
+	_check(deal != null and deal.disabled, "three card : « Distribuer » inactif sans Ante")
+	# Les jetons vont d'abord sur l'Ante, puis sur le Pair Plus une fois la cible changée.
+	var chip: Node = screen.find_children("*", "ChipButton", true, false)[1]
+	(chip as BaseButton).pressed.emit()
+	await _frames(2)
+	_check(e.ante == 25 and e.pair_plus == 0, "three card : jeton sur l'Ante")
+	screen.call("_select_target", 1)
+	await _frames(2)
+	chip = screen.find_children("*", "ChipButton", true, false)[0]
+	(chip as BaseButton).pressed.emit()
+	await _frames(2)
+	_check(e.pair_plus == 10, "three card : jeton sur le Pair Plus")
+	_check(_press(screen, "Distribuer"), "three card : distribuer")
+	await _frames(3)
+	_check(e.phase == ThreeCardEngine.Phase.DECIDE and e.player.size() == 3 and not e.revealed, "three card : 3 cartes, croupier caché")
+	_check(_find_button(screen, "Jouer (+25)") != null and _find_button(screen, "Se coucher") != null, "three card : choix Jouer / Se coucher")
+	stats.set_beginner(true)
+	screen.call("_refresh")
+	await _frames(2)
+	_check(_has_label(screen, "CONSEIL"), "three card : conseil du mode débutant")
+	stats.set_beginner(false)
+	_check(_press(screen, "Jouer (+25)"), "three card : jouer")
+	await _frames(3)
+	_check(e.phase == ThreeCardEngine.Phase.DONE and e.revealed and bank.pending == 0, "three card : manche résolue")
+	_check(stats.tc_rounds == 1, "three card : statistique enregistrée")
+	_check(_find_button(screen, "Rejouer") != null, "three card : bouton Rejouer")
+	# Aide.
+	var help: Button = _find_help_button(screen)
+	_check(help != null, "three card : bouton d'aide")
+	if help != null:
+		help.pressed.emit()
+		await _frames(3)
+		_check(HelpOverlay.is_open(screen) and _has_label(screen, "Three Card Poker"), "three card : aide ouverte")
+		HelpOverlay.close_in(screen)
+		await _frames(2)
+	# Enchaînement de manches, décisions variées : la banque reste cohérente.
+	var before: int = bank.value
+	var total: int = -e.net  # la manche en cours est déjà dans la banque
+	var played: int = 0
+	var guard: int = 0
+	while played < 25 and bank.value >= 30 and guard < 200:
+		guard += 1
+		if e.phase == ThreeCardEngine.Phase.DONE:
+			total += e.net
+			played += 1
+			_press(screen, "Rejouer")
+			await _frames(2)
+		elif e.phase == ThreeCardEngine.Phase.BET:
+			if e.ante < ThreeCardEngine.MIN_BET:
+				e.add_ante(10)
+			_press(screen, "Distribuer")
+			await _frames(2)
+		elif e.phase == ThreeCardEngine.Phase.DECIDE:
+			_press(screen, "Jouer (+%d)" % e.ante if played % 2 == 0 else "Se coucher")
+			await _frames(2)
+	_check(played >= 20 and bank.value == before + total, "three card : %d manches enchaînées, banque cohérente" % played)
+	_check(stats.tc_rounds >= played, "three card : statistiques cumulées")
+	_unmount(screen)
+	stats.reset_stats()
+	bank.set_to(1000)
+
+
+func _find_help_button(node: Node) -> Button:
+	if node is Button and (node as Button).text == "?":
+		return node as Button
+	for c: Node in node.get_children():
+		var f: Button = _find_help_button(c)
+		if f != null:
+			return f
+	return null
 
 
 func _test_backup(stats: StatsState, bank: BankrollState) -> void:

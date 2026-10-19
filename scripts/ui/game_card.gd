@@ -8,14 +8,14 @@ var _button: Button
 
 
 func _init(title: String, subtitle: String, icon_cards: Array[int]) -> void:
-	custom_minimum_size = Vector2(0, 104)
+	custom_minimum_size = Vector2(0, 88)
 	var style: StyleBoxFlat = UIKit.box(Color(0.06, 0.3, 0.17, 0.85), 20, UIKit.FELT_EDGE, 2)
 	add_theme_stylebox_override("panel", style)
 
 	var margin: MarginContainer = MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 14)
+		margin.add_theme_constant_override(side, 12)
 	add_child(margin)
 
 	var row: HBoxContainer = HBoxContainer.new()
@@ -34,11 +34,11 @@ func _init(title: String, subtitle: String, icon_cards: Array[int]) -> void:
 	texts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(texts)
 
-	var title_label: Label = UIKit.label(title, 22, UIKit.GOLD, true)
+	var title_label: Label = UIKit.label(title, 20, UIKit.GOLD, true)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	texts.add_child(title_label)
 
-	var sub_label: Label = UIKit.label(subtitle, 13, UIKit.TEXT_SOFT)
+	var sub_label: Label = UIKit.label(subtitle, 12, UIKit.TEXT_SOFT)
 	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	texts.add_child(sub_label)

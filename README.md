@@ -27,6 +27,14 @@ La tuile Poker propose le **face-à-face contre ZIA** ou une **table à 4 ou 6**
 - Indication de votre meilleure main en cours (« Paire de Rois »…).
 - Quitter en pleine main revient à se coucher.
 
+### Three Card Poker (contre le croupier)
+Poker à **3 cartes** contre la banque, avec les jetons de votre banque :
+- **Ante** (obligatoire) et **Pair Plus** (facultatif). Après avoir vu vos 3 cartes, vous **jouez** (seconde mise égale à l'Ante) ou vous **vous couchez** (Ante perdue). Il faut donc pouvoir couvrir le Jeu : l'Ante ne dépasse pas la moitié de la banque.
+- Le croupier se qualifie avec **Dame haute ou mieux**. Non qualifié : Ante payée 1:1, Jeu rendu. Qualifié : il faut le battre (Ante et Jeu 1:1), égalité = tout rendu.
+- Mains : quinte flush > brelan > quinte > couleur > paire > hauteur (A-2-3 est la plus petite quinte).
+- **Bonus d'Ante** (quinte 1:1, brelan 4:1, quinte flush 5:1), payé quand on joue même si le croupier gagne. **Pair Plus** indépendant du croupier : paire 1:1, couleur 4:1, quinte 6:1, brelan 30:1, quinte flush 40:1.
+- Mode débutant : conseil « jouer dès Dame-6-4 ». Statistiques globales et par joueur (couchés, Pair Plus gagnés), 3 succès.
+
 ### Dutch (variante « Cabo », 2 à 5 joueurs)
 Jeu de mémoire sans mise : **le moins de points gagne**. Disponible **seul contre ZIA** (tuile de l'accueil) ou **à plusieurs sur le même appareil** (Multijoueur local → Dutch, avec sièges IA possibles).
 - 4 cartes face cachées par joueur, 2 connues au départ (pastille dorée = carte mémorisée, affichée face visible pour son propriétaire).
@@ -47,7 +55,7 @@ La partie est indépendante de la banque et des statistiques solo.
 - Quitter avant la fin (deux appuis) rend les mises en cours et affiche le classement.
 
 ### Aide, mode débutant et tutoriel
-- **Tutoriel au lancement** : 6 pages (règles du blackjack, du poker et de Dutch, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
+- **Tutoriel au lancement** : 7 pages (règles du blackjack, du poker, du Three Card Poker et de Dutch, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
 - **Bouton « ? »** dans chaque partie : rappel des règles (et du classement des mains au poker).
 - **Écran Options** en trois onglets sous un en-tête fixe : **Réglages**, **Statistiques** (banque, courbe, stats par jeu) et **Succès**.
   Défilement tactile maison (`TouchScroll`) : on fait glisser la page en partant de n'importe où, même d'un bouton
@@ -73,7 +81,7 @@ Un **carnet de joueurs** illimité, sur l'appareil (`user://aszimut_profiles.jso
   Options → **Statistiques** : des boutons permettent d'afficher l'appareil entier ou un joueur, avec sa courbe de gains cumulés.
 - Écran **Joueurs** (depuis l'accueil, la préparation de partie ou Options) : progression, renommer, remettre la banque à 1000, supprimer.
 - **Joueur actif en solo** : le bouton « Joueur : … » de l'accueil permet de créer un joueur et de choisir qui joue
-  contre ZIA (ou « invité » sans profil). Le joueur actif donne son nom à la table (Blackjack, Poker, Dutch), sa banque
+  contre ZIA (ou « invité » sans profil). Le joueur actif donne son nom à la table (Blackjack, Poker, Three Card, Dutch), sa banque
   personnelle devient la banque solo (la banque d'invité est conservée à part) et ses résultats solo s'ajoutent à ses
   statistiques. Le premier joueur créé depuis l'écran Joueurs devient actif ; il est inclus dans la sauvegarde.
   En multijoueur local, le joueur actif est placé d'office au premier siège (retirable d'un appui).
@@ -133,6 +141,7 @@ scripts/
 │   ├── poker_engine.gd            # Moteur poker heads-up (machine à états + IA ZIA)
 │   ├── multi_blackjack_engine.gd  # Blackjack 2–5 joueurs (même appareil)
 │   ├── poker_table_engine.gd      # Poker 2–6 joueurs : blinds croissantes, pots annexes
+│   ├── three_card_engine.gd       # Three Card Poker : mains, Ante / Jeu / Pair Plus
 │   └── dutch_engine.gd            # Dutch 2–5 joueurs : pouvoirs, mémoire, IA
 └── ui/
     ├── ui_kit.gd        # Palette feutre vert/or + fabriques de widgets

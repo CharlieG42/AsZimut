@@ -6,7 +6,7 @@ extends RefCounted
 const START_BANK: int = 1000
 const MIN_BANK: int = 100
 const MAX_GROUPS: int = 6
-const GAME_KEYS: Array[String] = ["bj", "pk", "du"]
+const GAME_KEYS: Array[String] = ["bj", "pk", "tc", "du"]
 ## Nombre maximal de points conservés dans l'historique des gains cumulés d'un joueur.
 const HISTORY_MAX: int = 300
 
@@ -50,6 +50,7 @@ static func _empty_stats() -> Dictionary:
 	return {
 		"bj": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "blackjacks": 0, "net": 0},
 		"pk": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "splits": 0, "biggest_pot": 0, "net": 0},
+		"tc": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "folds": 0, "pair_plus_wins": 0, "net": 0},
 		"du": {"games": 0, "wins": 0, "best": -1},
 	}
 
@@ -321,13 +322,16 @@ static func record_game(game_key: String, entries: Array[Dictionary], update_ban
 	_save()
 
 
-## Gains cumulés (blackjack + poker) d'un profil, tous temps confondus.
+## Gains cumulés (blackjack, poker, Three Card Poker) d'un profil, tous temps confondus.
 static func total_net_of(p: Dictionary) -> int:
 	var hist: Array = p.get("history", [])
 	if not hist.is_empty():
 		return int((hist[hist.size() - 1] as Array)[1])
 	var stats: Dictionary = p.get("stats", {})
-	return int((stats.get("bj", {}) as Dictionary).get("net", 0)) + int((stats.get("pk", {}) as Dictionary).get("net", 0))
+	var total: int = 0
+	for key: String in ["bj", "pk", "tc"]:
+		total += int((stats.get(key, {}) as Dictionary).get("net", 0))
+	return total
 
 
 static func total_net(id: String) -> int:
@@ -363,6 +367,9 @@ static func summary(id: String) -> Array[String]:
 	var pk: Dictionary = stats.get("pk", {})
 	if int(pk.get("games", 0)) > 0:
 		lines.append("Poker : %d partie(s), %d gagnée(s), %s jetons" % [int(pk["games"]), int(pk["wins"]), UIKit.signed(int(pk["net"]))])
+	var tc: Dictionary = stats.get("tc", {})
+	if int(tc.get("games", 0)) > 0:
+		lines.append("Three Card : %d partie(s), %d gagnée(s), %s jetons" % [int(tc["games"]), int(tc["wins"]), UIKit.signed(int(tc["net"]))])
 	var du: Dictionary = stats.get("du", {})
 	if int(du.get("games", 0)) > 0:
 		lines.append("Dutch : %d partie(s), %d gagnée(s), meilleur total %d" % [int(du["games"]), int(du["wins"]), int(du["best"])])

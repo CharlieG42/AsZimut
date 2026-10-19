@@ -2,6 +2,7 @@ extends Control
 ## Accueil : choix du jeu et état de la banque.
 
 const BLACKJACK_SCENE: String = "res://scenes/blackjack.tscn"
+const THREE_CARD_SCENE: String = "res://scenes/three_card.tscn"
 const POKER_SCENE: String = "res://scenes/poker.tscn"
 const STATS_SCENE: String = "res://scenes/stats.tscn"
 const ABOUT_SCENE: String = "res://scenes/about.tscn"
@@ -33,14 +34,19 @@ func _ready() -> void:
 		margin.add_theme_constant_override(side, 20)
 	add_child(margin)
 
+	# Sur un petit écran la page défile ; sinon elle occupe toute la hauteur (boutons du bas en bas).
+	var scroll: TouchScroll = TouchScroll.new()
+	margin.add_child(scroll)
 	var col: VBoxContainer = VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	margin.add_child(col)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 8)
+	scroll.add_child(col)
+	scroll.resized.connect(func() -> void: col.custom_minimum_size.y = scroll.size.y)
 
 	col.add_child(UIKit.spacer(0))
 
 	_logo = Control.new()
-	_logo.custom_minimum_size = Vector2(0, 112)
+	_logo.custom_minimum_size = Vector2(0, 92)
 	_logo.resized.connect(_layout_logo)
 	col.add_child(_logo)
 	var logo_specs: Array[Array] = [
@@ -48,13 +54,13 @@ func _ready() -> void:
 		[14, Cards.Suit.HEARTS],
 	]
 	for spec: Array in logo_specs:
-		var view: CardView = CardView.new(1.1)
+		var view: CardView = CardView.new(0.9)
 		_logo.add_child(view)
 		view.show_card(Cards.make(int(spec[0]), int(spec[1])), false)
 		_logo_cards.append(view)
 
-	col.add_child(UIKit.label("AsZimut", 46, UIKit.GOLD, true))
-	col.add_child(UIKit.label("Blackjack, Poker & Dutch — WildZimut", 14, UIKit.TEXT_SOFT))
+	col.add_child(UIKit.label("AsZimut", 40, UIKit.GOLD, true))
+	col.add_child(UIKit.label("Blackjack, Poker, Three Card & Dutch", 14, UIKit.TEXT_SOFT))
 	col.add_child(UIKit.spacer(4))
 
 	_player_button = UIKit.outline_button("", UIKit.TEXT_SOFT, 14)
@@ -127,6 +133,14 @@ func _ready() -> void:
 	)
 	_poker_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_poker_hint)
+
+	var tcp_card: GameCard = GameCard.new(
+		"Three Card Poker",
+		"3 cartes contre le croupier : Ante, Jeu et Pair Plus.",
+		[Cards.make(12, Cards.Suit.SPADES), Cards.make(6, Cards.Suit.HEARTS), Cards.make(4, Cards.Suit.CLUBS)] as Array[int]
+	)
+	tcp_card.pressed.connect(_open.bind(THREE_CARD_SCENE))
+	col.add_child(tcp_card)
 
 	var dutch_card: GameCard = GameCard.new(
 		"Dutch",
@@ -201,10 +215,10 @@ func _layout_logo() -> void:
 	if _logo_cards.size() < 2:
 		return
 	var cx: float = _logo.size.x / 2.0
-	var card_size: Vector2 = CardView.BASE_SIZE * 1.1
-	_logo_cards[0].position = Vector2(cx - card_size.x * 0.95, 14)
+	var card_size: Vector2 = CardView.BASE_SIZE * 0.9
+	_logo_cards[0].position = Vector2(cx - card_size.x * 0.95, 6)
 	_logo_cards[0].rotation = -0.17
-	_logo_cards[1].position = Vector2(cx - card_size.x * 0.05, 14)
+	_logo_cards[1].position = Vector2(cx - card_size.x * 0.05, 6)
 	_logo_cards[1].rotation = 0.14
 
 

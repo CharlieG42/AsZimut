@@ -212,6 +212,7 @@ func _build_player_stats(id: String) -> void:
 	var p: Dictionary = ProfileStore.get_profile(id)
 	var bj: Dictionary = ProfileStore.game_stats(id, "bj")
 	var pk: Dictionary = ProfileStore.game_stats(id, "pk")
+	var tc: Dictionary = ProfileStore.game_stats(id, "tc")
 	var du: Dictionary = ProfileStore.game_stats(id, "du")
 	var total: int = ProfileStore.total_net(id)
 
@@ -219,8 +220,8 @@ func _build_player_stats(id: String) -> void:
 	_row(bank_box, "Actuelle", str(ProfileStore.bank_of(id)))
 	_row(bank_box, "Record", str(int(p.get("best_bank", ProfileStore.START_BANK))))
 	_row(bank_box, "Gains cumulés", UIKit.signed(total), _net_color(total))
-	_row(bank_box, "Parties jouées", str(int(bj["games"]) + int(pk["games"]) + int(du["games"])))
-	bank_box.add_child(_small("Gains cumulés (blackjack + poker), partie après partie"))
+	_row(bank_box, "Parties jouées", str(int(bj["games"]) + int(pk["games"]) + int(tc["games"]) + int(du["games"])))
+	bank_box.add_child(_small("Gains cumulés (blackjack, poker, Three Card), partie après partie"))
 	var chart: BankChart = BankChart.new(ProfileStore.history_values(id))
 	chart.baseline = 0
 	chart.empty_text = "Jouez quelques parties pour voir la courbe."
@@ -241,6 +242,15 @@ func _build_player_stats(id: String) -> void:
 	_row(pk_box, "Parts égales", str(int(pk["pushes"])))
 	_row(pk_box, "Plus gros pot gagné", str(int(pk["biggest_pot"])))
 	_row(pk_box, "Gain net", UIKit.signed(int(pk["net"])), _net_color(int(pk["net"])))
+
+	var tc_box: VBoxContainer = _section("Three Card Poker")
+	_row(tc_box, "Parties", str(int(tc["games"])))
+	_row(tc_box, "Victoires", "%d  (%d %%)" % [int(tc["wins"]), StatsState.percent(int(tc["wins"]), int(tc["games"]))])
+	_row(tc_box, "Défaites", str(int(tc["losses"])))
+	_row(tc_box, "Égalités", str(int(tc["pushes"])))
+	_row(tc_box, "Couchés", str(int(tc["folds"])))
+	_row(tc_box, "Pair Plus gagnés", str(int(tc["pair_plus_wins"])))
+	_row(tc_box, "Gain net", UIKit.signed(int(tc["net"])), _net_color(int(tc["net"])))
 
 	var du_box: VBoxContainer = _section("Dutch")
 	_row(du_box, "Parties", str(int(du["games"])))
@@ -276,6 +286,16 @@ func _build_global_stats() -> void:
 	_row(pk, "Parts égales", str(Stats.pk_splits))
 	_row(pk, "Plus gros pot gagné", str(Stats.pk_biggest_pot))
 	_row(pk, "Gain net", UIKit.signed(Stats.pk_net), _net_color(Stats.pk_net))
+
+	var tc: VBoxContainer = _section("Three Card Poker")
+	_row(tc, "Parties", str(Stats.tc_rounds))
+	_row(tc, "Victoires", "%d  (%d %%)" % [Stats.tc_wins, StatsState.percent(Stats.tc_wins, Stats.tc_rounds)])
+	_row(tc, "Défaites", str(Stats.tc_losses))
+	_row(tc, "Égalités", str(Stats.tc_pushes))
+	_row(tc, "Couchés", str(Stats.tc_folds))
+	_row(tc, "Pair Plus gagnés", str(Stats.tc_pair_plus_wins))
+	_row(tc, "Brelans / quintes flush", "%d / %d" % [Stats.tc_trips, Stats.tc_straight_flushes])
+	_row(tc, "Gain net", UIKit.signed(Stats.tc_net), _net_color(Stats.tc_net))
 
 	var du: VBoxContainer = _section("Dutch (contre ZIA)")
 	_row(du, "Parties", str(Stats.du_games))
