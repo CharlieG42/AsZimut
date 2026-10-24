@@ -32,6 +32,7 @@ func _initialize() -> void:
 	_test_profiles()
 	_test_active_player()
 	_test_three_card()
+	_test_double_down()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1438,4 +1439,79 @@ func _test_three_card() -> void:
 	_check(ProfileStore.summary(zoe)[0].begins_with("Three Card"), "joueur : résumé Three Card")
 	ProfileStore.set_active("")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
+	bank.free()
+
+
+## Pioche truquée : `cards` dans l'ordre où elles seront tirées, précédées de cartes de remplissage.
+func _rigged_deck(cards: Array, pad: int = 24) -> Array[int]:
+	var deck: Array[int] = []
+	for i: int in pad:
+		deck.append(i)
+	for i: int in range(cards.size() - 1, -1, -1):
+		deck.append(Cards.make(int((cards[i] as Array)[0]), int((cards[i] as Array)[1])))
+	return deck
+
+
+func _test_double_down() -> void:
+	# Solo : 5 + 6 contre 10 + 7, on double et on tire un 10 (21).
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	var e: BlackjackEngine = BlackjackEngine.new(bank)
+	e.deck = _rigged_deck([[5, 0], [6, 1], [10, 3], [7, 2], [10, 0]])
+	e.add_to_bet(50)
+	e.deal()
+	_check(e.phase == BlackjackEngine.Phase.PLAYER and e.can_double(), "doubler : disponible avec 2 cartes")
+	e.double_down()
+	_check(e.bet == 100 and e.base_bet == 50 and bank.value == 900 and e.player.size() == 3, "doubler : mise doublée, une seule carte (banque %d)" % bank.value)
+	_check(e.phase == BlackjackEngine.Phase.DEALER and not e.can_double(), "doubler : le croupier joue ensuite")
+	e.dealer_plays()
+	_check(e.outcome == BlackjackEngine.Outcome.WIN and e.net == 100 and bank.value == 1100 and bank.pending == 0, "doubler : gain de la mise doublée (+100)")
+	e.replay()
+	_check(e.bet == 50 and e.phase == BlackjackEngine.Phase.BET, "doubler : la manche suivante reprend la mise de départ (50)")
+	# Doubler perdu en dépassant : la mise doublée est perdue, et on repart de 50.
+	e.deck = _rigged_deck([[10, 0], [6, 1], [10, 3], [7, 2], [10, 1]])
+	e.deal()
+	e.double_down()
+	_check(e.outcome == BlackjackEngine.Outcome.LOSE and e.net == -100 and bank.value == 1000, "doubler : dépassement = -100 (banque %d)" % bank.value)
+	e.replay()
+	_check(e.bet == 50, "doubler perdu : mise de départ reprise")
+	# Pas assez de jetons pour doubler.
+	bank.value = 60
+	e.clear_bet()
+	e.add_to_bet(50)
+	e.deal()
+	_check(not e.can_double() and e.phase != BlackjackEngine.Phase.BET, "doubler : refusé si la banque ne couvre pas la mise")
+	var before: int = bank.value
+	e.double_down()
+	_check(bank.value == before and e.bet == 50, "doubler refusé : rien n'est prélevé")
+	# Doubler après un split, chaque main avec sa mise.
+	bank.value = 1000
+	var sp: BlackjackEngine = BlackjackEngine.new(bank)
+	sp.deck = _rigged_deck([[8, 0], [8, 1], [10, 3], [7, 2], [3, 0], [9, 0], [2, 1], [10, 2]])
+	sp.add_to_bet(50)
+	sp.deal()
+	_check(sp.can_split(), "doubler après split : paire de 8 séparable")
+	sp.split()
+	_check(sp.has_split and bank.value == 900 and sp.player.size() == 2, "split : seconde mise prélevée")
+	sp.double_down()
+	_check(sp.bet == 100 and bank.value == 850 and sp.active_hand == 1, "split : main 1 doublée (+50), on passe à la main 2")
+	sp.double_down()
+	_check(sp.split_bet == 100 and bank.value == 800 and sp.phase == BlackjackEngine.Phase.DEALER, "split : main 2 doublée (+50)")
+	sp.dealer_plays()
+	_check(bank.value == 1000 + sp.net and bank.pending == 0 and sp.total_staked() == 200, "split doublé : banque cohérente (%d, net %d)" % [bank.value, sp.net])
+	sp.replay()
+	_check(sp.bet == 50, "split doublé : mise de départ reprise")
+	# Multijoueur : même règle.
+	var m: MultiBlackjackEngine = MultiBlackjackEngine.new(["A"] as Array[String], 1000)
+	m.deck = _rigged_deck([[5, 0], [6, 1], [10, 3], [7, 2], [10, 0]])
+	m.add_to_bet(50)
+	m.confirm_bet()
+	_check(m.phase == MultiBlackjackEngine.Phase.PLAY and m.can_double(), "multi : doubler disponible")
+	m.double_down()
+	_check(m.seats[0].bet == 100 and m.seats[0].base_bet == 50 and m.seats[0].stack == 900, "multi : mise doublée (pile %d)" % m.seats[0].stack)
+	m.dealer_plays()
+	_check(m.seats[0].stack == 1100 and m.seats[0].net == 100, "multi : gain doublé (+100)")
+	m.next_round()
+	_check(m.seats[0].bet == 50, "multi : la manche suivante reprend la mise de départ")
 	bank.free()

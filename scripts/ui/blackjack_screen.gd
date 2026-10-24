@@ -15,6 +15,7 @@ var _split_box: VBoxContainer
 var _split_row: CardRow
 var _split_label: Label
 var _player_total: PanelContainer
+var _bet_chip: PanelContainer
 var _message_panel: PanelContainer
 var _message_label: Label
 var _controls: VBoxContainer
@@ -100,7 +101,11 @@ func _build_felt() -> Control:
 	_player_label = UIKit.label("VOUS", 12, UIKit.TEXT_SOFT, true)
 	col.add_child(_player_label)
 	_player_total = UIKit.chip("0")
-	col.add_child(_centered(_player_total))
+	_bet_chip = UIKit.chip("")
+	var totals: HBoxContainer = _centered(_player_total)
+	totals.add_theme_constant_override("separation", 8)
+	totals.add_child(_bet_chip)
+	col.add_child(totals)
 
 	_split_box = VBoxContainer.new()
 	_split_box.add_theme_constant_override("separation", 6)
@@ -157,6 +162,7 @@ func _refresh() -> void:
 	if not engine.player.is_empty():
 		UIKit.chip_label(_player_total).text = str(BlackjackEngine.bj_value(engine.player))
 
+	_refresh_bet_chip()
 	_message_panel.visible = engine.message != ""
 	_message_label.text = engine.message
 	_message_panel.add_theme_stylebox_override("panel", UIKit.banner_style(_banner_kind()))
@@ -168,6 +174,20 @@ func _refresh() -> void:
 	_rebuild_controls()
 	if engine.phase == BlackjackEngine.Phase.DEALER and _dealer_timer.is_stopped():
 		_dealer_timer.start()
+
+
+## Mise en jeu, visible pendant toute la manche (elle double après « Doubler »).
+func _refresh_bet_chip() -> void:
+	var staked: int = engine.total_staked()
+	_bet_chip.visible = engine.phase != BlackjackEngine.Phase.BET and staked > 0 and not engine.has_split
+	if not _bet_chip.visible:
+		return
+	var text: String = "Mise %d" % engine.bet
+	if engine.bet > engine.base_bet:
+		text += " · doublée"
+	if engine.insurance > 0:
+		text += " + assurance %d" % engine.insurance
+	UIKit.chip_label(_bet_chip).text = text
 
 
 func _banner_kind() -> int:
@@ -284,16 +304,21 @@ func _build_action_buttons() -> Control:
 	stand.pressed.connect(engine.stand)
 	row.add_child(stand)
 
-	var dbl: Button = UIKit.button("Doubler", Color(0.2, 0.33, 0.28))
+	var dbl: Button = UIKit.button("Doubler (+%d)" % engine.current_bet(), Color(0.2, 0.33, 0.28))
 	dbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dbl.disabled = not engine.can_double()
 	dbl.pressed.connect(engine.double_down)
 	row.add_child(dbl)
-	if not engine.can_split():
+	var no_funds: bool = engine.current_hand().size() == 2 and not engine.can_double()
+	if not engine.can_split() and not no_funds:
 		return row
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	col.add_child(row)
+	if no_funds:
+		col.add_child(UIKit.label("Banque insuffisante pour doubler.", 12, UIKit.WARNING_TEXT))
+	if not engine.can_split():
+		return col
 	var split_btn: Button = UIKit.outline_button("Séparer la paire (+%d)" % engine.bet, UIKit.GOLD, 17)
 	split_btn.pressed.connect(engine.split)
 	col.add_child(split_btn)

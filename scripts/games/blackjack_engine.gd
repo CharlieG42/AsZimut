@@ -25,6 +25,8 @@ var _hand_done: Array[bool] = [false, false]
 var dealer: Array[int] = []
 var phase: Phase = Phase.BET
 var bet: int = 0
+## Mise de départ de la manche (avant un éventuel doublement) : c'est elle qui est reprise en rejouant.
+var base_bet: int = 0
 var message: String = ""
 var revealed: bool = false
 var outcome: Outcome = Outcome.NONE
@@ -76,6 +78,7 @@ func deal() -> void:
 		return
 	_bankroll.add(-bet)
 	_bankroll.set_pending(bet)
+	base_bet = bet
 	if deck.size() < 15:
 		deck = Cards.shuffled_deck(rng)
 	player = [deck.pop_back(), deck.pop_back()]
@@ -346,7 +349,8 @@ func _resolve() -> void:
 
 
 func replay() -> void:
-	var next_bet: int = mini(bet, _bankroll.value)
+	# On repart de la mise de départ, pas de la mise doublée.
+	var next_bet: int = mini(base_bet if base_bet > 0 else bet, _bankroll.value)
 	player = []
 	dealer = []
 	split_hand = []

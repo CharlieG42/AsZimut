@@ -17,6 +17,8 @@ class Seat extends RefCounted:
 	var name: String
 	var stack: int
 	var bet: int = 0
+	## Mise de départ de la manche (avant un éventuel doublement), reprise à la manche suivante.
+	var base_bet: int = 0
 	var ready: bool = false  # mise validée
 	var is_bot: bool = false
 	var hand: Array[int] = []
@@ -153,6 +155,7 @@ func confirm_bet() -> void:
 	if s.bet < MIN_BET or s.bet > s.stack:
 		return
 	s.stack -= s.bet
+	s.base_bet = s.bet
 	s.ready = true
 	var next: int = _next_bettor(current)
 	if next < 0:
@@ -230,7 +233,7 @@ func next_round() -> void:
 		s.ready = false
 		s.result = BlackjackEngine.Outcome.NONE
 		s.net = 0
-		s.bet = mini(s.bet, s.stack)
+		s.bet = mini(s.base_bet if s.base_bet > 0 else s.bet, s.stack)
 		if s.bet < MIN_BET:
 			s.bet = 0
 	dealer = []

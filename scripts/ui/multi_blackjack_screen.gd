@@ -390,7 +390,7 @@ func _build_action_buttons() -> Control:
 	stand.pressed.connect(engine.stand)
 	row.add_child(stand)
 
-	var dbl: Button = UIKit.button("Doubler", Color(0.2, 0.33, 0.28))
+	var dbl: Button = UIKit.button("Doubler (+%d)" % engine.seats[engine.current].bet, Color(0.2, 0.33, 0.28))
 	dbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dbl.disabled = not engine.can_double()
 	dbl.pressed.connect(engine.double_down)
