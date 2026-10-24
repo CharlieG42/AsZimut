@@ -43,7 +43,7 @@ Poker à **3 cartes** contre la banque, avec les jetons de votre banque :
 ### Baccarat (punto banco, solo)
 Pariez sur **Joueur** (1:1), **Banquier** (1:1 moins 5 % de commission) ou **Égalité** (8:1, Joueur/Banquier rendus) ; les cartes se tirent selon les règles fixes du punto banco (naturels 8/9, 3e carte du Joueur à 0-5, tableau du Banquier). Historique J/B/É, mode débutant, statistiques, 2 succès.
 
-### Animations
+### Bille et jetons volants
 - **Roulette** : la bille tourne (les numéros défilent en ralentissant) avant de révéler le résultat ; la banque et les statistiques ne bougent qu'à l'arrêt.
 - **Jetons volants** : la mise vole du jeton vers la pile (blackjack, Three Card, baccarat, roulette), les gains vont vers la banque, les pertes quittent l'écran ; au poker, les mises vont vers le pot puis le pot vers le gagnant. Purement visuel (`ChipFly`).
 
