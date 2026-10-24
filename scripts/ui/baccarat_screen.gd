@@ -11,6 +11,8 @@ var _player_row: CardRow
 var _banker_row: CardRow
 var _player_chip: PanelContainer
 var _banker_chip: PanelContainer
+var _felt_node: Control
+var _piles: Dictionary = {}
 var _history_row: HBoxContainer
 var _message_panel: PanelContainer
 var _message_label: Label
@@ -78,6 +80,7 @@ func _build_felt() -> Control:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	var felt: PanelContainer = UIKit.table(col, 16)
+	_felt_node = felt
 
 	col.add_child(UIKit.label("BANQUIER", 12, UIKit.TEXT_SOFT, true))
 	_banker_row = CardRow.new(0.9, 3)
@@ -157,6 +160,10 @@ func _refresh() -> void:
 
 
 func _on_round_finished(net: int) -> void:
+	if net > 0:
+		ChipFly.fly(_felt_node, _bank, net)
+	elif net < 0:
+		ChipFly.fly_away(_felt_node, -net)
 	Stats.record_baccarat(net, engine.winner == BaccaratEngine.Spot.TIE)
 	ProfileStore.record_active("ba", net > 0, net)
 	Stats.note_bank(Bankroll.value)
@@ -199,7 +206,7 @@ func _build_bet_panel() -> Control:
 	for v: int in CHIP_VALUES:
 		var chip_btn: ChipButton = ChipButton.new(v)
 		chip_btn.disabled = not engine.can_add(v)
-		chip_btn.pressed.connect(_add_chip.bind(v))
+		chip_btn.pressed.connect(_add_chip.bind(v, chip_btn))
 		chips.add_child(chip_btn)
 	col.add_child(chips)
 
@@ -240,6 +247,7 @@ func _bet_box(title: String, side: int) -> Control:
 	col.add_child(head)
 	var pile: ChipPile = ChipPile.new(80)
 	pile.set_amount(engine.bets[side])
+	_piles[side] = pile
 	col.add_child(pile)
 	var pick: Button = Button.new()
 	pick.flat = true
@@ -254,7 +262,8 @@ func _select_target(side: int) -> void:
 	_rebuild_controls()
 
 
-func _add_chip(v: int) -> void:
+func _add_chip(v: int, from: Control = null) -> void:
+	ChipFly.fly(from, _piles.get(target) as Control, v, 2)
 	engine.add_bet(target, v)
 
 

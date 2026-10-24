@@ -14,6 +14,9 @@ var _ai_dealer_badge: Control
 var _ai_row: CardRow
 var _board_row: CardRow
 var _pot_chip: CoinLabel
+var _pot_pill: Control
+var _prev_p_bet: int = -1
+var _prev_a_bet: int = -1
 var _street_chip: PanelContainer
 var _result_panel: PanelContainer
 var _result_label: Label
@@ -161,6 +164,7 @@ func _build_table() -> Control:
 	_pot_chip = CoinLabel.new(14, Color(0.82, 0.98, 0.9), "Pot :")
 	pot_pill.add_child(_pot_chip)
 	chips.add_child(pot_pill)
+	_pot_pill = pot_pill
 	_street_chip = UIKit.chip("")
 	chips.add_child(_street_chip)
 	col.add_child(chips)
@@ -207,6 +211,7 @@ func _refresh() -> void:
 	_stack_label.set_amount(engine.p_stack, true)
 	_ai_stack.set_amount(engine.a_stack, true)
 
+	_animate_chips()
 	_ai_bet_pile.set_amount(engine.a_bet)
 	_ai_dealer_badge.visible = not engine.dealer_is_player
 	_player_bet_pile.set_amount(engine.p_bet)
@@ -235,6 +240,30 @@ func _refresh() -> void:
 	_refresh_log()
 	_rebuild_actions()
 	_schedule_ai()
+
+
+## Jetons qui volent : pile de mise ← pile du joueur, pile de mise → pot, pot → gagnant.
+func _animate_chips() -> void:
+	if _prev_p_bet >= 0:
+		if engine.p_bet > _prev_p_bet:
+			ChipFly.fly(_stack_label, _player_bet_pile, engine.p_bet - _prev_p_bet, 2)
+		elif engine.p_bet < _prev_p_bet and not engine.is_over():
+			ChipFly.fly(_player_bet_pile, _pot_pill, _prev_p_bet - engine.p_bet, 2)
+		if engine.a_bet > _prev_a_bet:
+			ChipFly.fly(_ai_stack, _ai_bet_pile, engine.a_bet - _prev_a_bet, 2)
+		elif engine.a_bet < _prev_a_bet and not engine.is_over():
+			ChipFly.fly(_ai_bet_pile, _pot_pill, _prev_a_bet - engine.a_bet, 2)
+		if engine.is_over() and engine.result != _last_result and engine.result != "":
+			match engine.last_outcome:
+				PokerEngine.HandOutcome.WIN:
+					ChipFly.fly(_pot_pill, _stack_label, engine.pot, 4)
+				PokerEngine.HandOutcome.LOSE:
+					ChipFly.fly(_pot_pill, _ai_stack, engine.pot, 4)
+				_:
+					ChipFly.fly(_pot_pill, _stack_label, engine.pot / 2, 2)
+					ChipFly.fly(_pot_pill, _ai_stack, engine.pot / 2, 2)
+	_prev_p_bet = engine.p_bet
+	_prev_a_bet = engine.a_bet
 
 
 func _banner_kind() -> int:

@@ -43,6 +43,10 @@ Poker à **3 cartes** contre la banque, avec les jetons de votre banque :
 ### Baccarat (punto banco, solo)
 Pariez sur **Joueur** (1:1), **Banquier** (1:1 moins 5 % de commission) ou **Égalité** (8:1, Joueur/Banquier rendus) ; les cartes se tirent selon les règles fixes du punto banco (naturels 8/9, 3e carte du Joueur à 0-5, tableau du Banquier). Historique J/B/É, mode débutant, statistiques, 2 succès.
 
+### Animations
+- **Roulette** : la bille tourne (les numéros défilent en ralentissant) avant de révéler le résultat ; la banque et les statistiques ne bougent qu'à l'arrêt.
+- **Jetons volants** : la mise vole du jeton vers la pile (blackjack, Three Card, baccarat, roulette), les gains vont vers la banque, les pertes quittent l'écran ; au poker, les mises vont vers le pot puis le pot vers le gagnant. Purement visuel (`ChipFly`).
+
 ### Dutch (variante « Cabo », 2 à 5 joueurs)
 Jeu de mémoire sans mise : **le moins de points gagne**. Disponible **seul contre ZIA** (tuile de l'accueil) ou **à plusieurs sur le même appareil** (Multijoueur local → Dutch, avec sièges IA possibles).
 - 4 cartes face cachées par joueur, 2 connues au départ (pastille dorée = carte mémorisée, affichée face visible pour son propriétaire).
@@ -231,7 +235,7 @@ Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.
 - [x] Animation de distribution des cartes
 - [x] Statistiques Dutch, succès, courbe de la banque
 - [x] Split et assurance au blackjack local à plusieurs
-- [ ] Animation des jetons vers le pot
+- [x] Animation des jetons vers le pot
 - [ ] Plus de jeux (une future table de modules à la façon Sebae)
 
 ---

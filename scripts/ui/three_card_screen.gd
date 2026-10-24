@@ -15,6 +15,7 @@ var _message_panel: PanelContainer
 var _message_label: Label
 var _controls: VBoxContainer
 var _last_message: String = ""
+var _felt_node: Control
 var _ante_pile: ChipPile
 var _pair_pile: ChipPile
 ## Cible des jetons pendant la mise : 0 = Ante, 1 = Pair Plus.
@@ -79,6 +80,7 @@ func _build_felt() -> Control:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	var felt: PanelContainer = UIKit.table(col, 16)
+	_felt_node = felt
 
 	col.add_child(UIKit.label("CROUPIER", 12, UIKit.TEXT_SOFT, true))
 	_dealer_row = CardRow.new(1.0, 3)
@@ -151,6 +153,10 @@ func _banner_kind() -> int:
 
 
 func _on_round_finished(net: int) -> void:
+	if net > 0:
+		ChipFly.fly(_felt_node, _bank, net)
+	elif net < 0:
+		ChipFly.fly_away(_felt_node, -net)
 	var category: int = ThreeCardEngine.evaluate(engine.player)[0]
 	Stats.record_three_card(net, category, engine.folded, engine.pair_plus_won)
 	var extra: Dictionary = {}
@@ -204,7 +210,7 @@ func _build_bet_panel() -> Control:
 	for v: int in CHIP_VALUES:
 		var chip_btn: ChipButton = ChipButton.new(v)
 		chip_btn.disabled = not (engine.can_add_ante(v) if _target == 0 else engine.can_add_pair_plus(v))
-		chip_btn.pressed.connect(_add_chip.bind(v))
+		chip_btn.pressed.connect(_add_chip.bind(v, chip_btn))
 		chips.add_child(chip_btn)
 	col.add_child(chips)
 
@@ -273,7 +279,8 @@ func _select_target(target: int) -> void:
 	_rebuild_controls()
 
 
-func _add_chip(v: int) -> void:
+func _add_chip(v: int, from: Control = null) -> void:
+	ChipFly.fly(from, _ante_pile if _target == 0 else _pair_pile, v, 2)
 	if _target == 0:
 		engine.add_ante(v)
 	else:

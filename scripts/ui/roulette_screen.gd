@@ -17,6 +17,13 @@ var _message_panel: PanelContainer
 var _message_label: Label
 var _controls: VBoxContainer
 var _last_message: String = ""
+var _felt_node: Control
+var _chip_buttons: Dictionary = {}
+## Animation de la bille en cours (le moteur a déjà tiré le numéro, l'écran le cache).
+var _animating: bool = false
+var _shown: int = -1
+## Sans animation (tests) : résultat immédiat.
+var skip_animation: bool = false
 ## Valeur du jeton sélectionné.
 var chip: int = 10
 
@@ -79,6 +86,7 @@ func _build_felt() -> Control:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	var felt: PanelContainer = UIKit.table(col, 16)
+	_felt_node = felt
 
 	_result_chip = PanelContainer.new()
 	_result_chip.custom_minimum_size = Vector2(96, 96)
@@ -112,31 +120,30 @@ func _color_for(n: int) -> Color:
 
 
 func _refresh() -> void:
-	_bank.set_amount(Bankroll.value, true)
-
-	var has_result: bool = engine.result >= 0
-	_result_chip.add_theme_stylebox_override(
-		"panel", UIKit.box(_color_for(engine.result) if has_result else Color(0, 0, 0, 0.35), 48, UIKit.GOLD, 3)
-	)
-	_result_label.text = str(engine.result) if has_result else "?"
+	# Pendant la rotation, la banque n'affiche pas encore le gain.
+	_bank.set_amount(Bankroll.value - (engine.payout if _animating else 0), true)
+	_show_number(_shown if _animating else engine.result)
 
 	for child: Node in _history_row.get_children():
 		_history_row.remove_child(child)
 		child.queue_free()
-	for n: int in engine.history:
+	var past: Array[int] = engine.history.duplicate()
+	if _animating and not past.is_empty():
+		past.pop_back()
+	for n: int in past:
 		var dot: PanelContainer = PanelContainer.new()
 		dot.custom_minimum_size = Vector2(30, 26)
 		dot.add_theme_stylebox_override("panel", UIKit.box(_color_for(n), 8))
 		dot.add_child(UIKit.label(str(n), 12, Color.WHITE, true))
 		_history_row.add_child(dot)
 
-	_message_panel.visible = engine.message != ""
+	_message_panel.visible = engine.message != "" and not _animating
 	_message_label.text = engine.message
 	var kind: int = UIKit.Banner.NEUTRAL
-	if engine.phase == RouletteEngine.Phase.DONE:
+	if engine.phase == RouletteEngine.Phase.DONE and not _animating:
 		kind = UIKit.Banner.WIN if engine.net > 0 else (UIKit.Banner.LOSE if engine.net < 0 else UIKit.Banner.NEUTRAL)
 	_message_panel.add_theme_stylebox_override("panel", UIKit.banner_style(kind))
-	if engine.message != _last_message:
+	if engine.message != _last_message and not _animating:
 		_last_message = engine.message
 		if engine.message != "":
 			UIKit.pop(_message_panel)
@@ -144,7 +151,53 @@ func _refresh() -> void:
 	_rebuild_controls()
 
 
+func _show_number(n: int) -> void:
+	var has_result: bool = n >= 0
+	_result_chip.add_theme_stylebox_override(
+		"panel", UIKit.box(_color_for(n) if has_result else Color(0, 0, 0, 0.35), 48, UIKit.GOLD, 3)
+	)
+	_result_label.text = str(n) if has_result else "?"
+
+
+func _spin() -> void:
+	if not engine.can_spin():
+		return
+	_animating = not skip_animation
+	_shown = engine.result
+	engine.spin()
+
+
+## La bille ralentit : les numéros défilent de plus en plus lentement jusqu'au résultat.
+func _animate_spin() -> void:
+	var ticks: int = 16
+	var last: int = -1
+	for i: int in ticks:
+		var n: int = engine.rng.randi_range(0, 36)
+		while n == last or n == engine.result:
+			n = engine.rng.randi_range(0, 36)
+		last = n
+		_shown = n
+		_show_number(n)
+		SfxPlayer.play("chip", -14.0)
+		await get_tree().create_timer(0.03 + i * 0.011).timeout
+		if not is_inside_tree():
+			return
+	_shown = engine.result
+	_show_number(engine.result)
+
+
 func _on_round_finished(net: int) -> void:
+	if _animating:
+		await _animate_spin()
+		if not is_inside_tree():
+			return
+		_animating = false
+		_refresh()
+		UIKit.pop(_result_chip)
+	if net > 0:
+		ChipFly.fly(_felt_node, _bank, net)
+	elif net < 0:
+		ChipFly.fly_away(_felt_node, -net)
 	var straight_hit: bool = engine.bet_on("n:%d" % engine.result) > 0
 	Stats.record_roulette(net, straight_hit)
 	ProfileStore.record_active("ro", net > 0, net)
@@ -161,7 +214,11 @@ func _rebuild_controls() -> void:
 	for node: Node in _controls.get_children():
 		_controls.remove_child(node)
 		node.queue_free()
-	if engine.phase == RouletteEngine.Phase.BET:
+	if _animating:
+		var wait: Label = UIKit.label("La bille tourne…", 18, UIKit.TEXT_SOFT)
+		wait.custom_minimum_size = Vector2(0, 80)
+		_controls.add_child(wait)
+	elif engine.phase == RouletteEngine.Phase.BET:
 		_controls.add_child(_build_bet_panel())
 	else:
 		_controls.add_child(_build_recap())
@@ -201,6 +258,7 @@ func _build_bet_panel() -> Control:
 	for v: int in CHIP_VALUES:
 		var b: ChipButton = ChipButton.new(v)
 		b.modulate.a = 1.0 if v == chip else 0.4
+		_chip_buttons[v] = b
 		b.pressed.connect(_select_chip.bind(v))
 		chips.add_child(b)
 	col.add_child(chips)
@@ -254,7 +312,7 @@ func _build_bet_panel() -> Control:
 
 	var spin: Button = UIKit.button("Lancer la bille", UIKit.GOLD, UIKit.INK, 20)
 	spin.disabled = not engine.can_spin()
-	spin.pressed.connect(engine.spin)
+	spin.pressed.connect(_spin)
 	col.add_child(spin)
 	if Bankroll.value < RouletteEngine.MIN_BET:
 		var warn: Label = UIKit.label("Banque insuffisante — rechargez-la depuis l'accueil.", 12, UIKit.WARNING_TEXT)
@@ -279,8 +337,13 @@ func _cell(text: String, key: String, bg: Color, height: int, font: int = 15) ->
 	var style: StyleBoxFlat = UIKit.box(bg, 8, border, 2 if amount > 0 else 1)
 	for style_name: String in ["normal", "hover", "pressed", "disabled", "focus"]:
 		b.add_theme_stylebox_override(style_name, style)
-	b.pressed.connect(engine.add_bet.bind(key, chip))
+	b.pressed.connect(_on_cell.bind(b, key))
 	return b
+
+
+func _on_cell(cell: Control, key: String) -> void:
+	ChipFly.fly(_chip_buttons.get(chip) as Control, cell, chip, 2)
+	engine.add_bet(key, chip)
 
 
 func _select_chip(v: int) -> void:

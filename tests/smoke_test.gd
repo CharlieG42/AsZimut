@@ -43,6 +43,7 @@ func _press(scene: Node, text: String) -> bool:
 
 
 func _run() -> void:
+	ChipFly.enabled = false
 	GameSave.path = "user://test_resume.json"
 	ProfileStore.path = "user://test_profiles_ui.json"
 	if FileAccess.file_exists(ProfileStore.path):
@@ -82,6 +83,7 @@ func _run() -> void:
 	await _test_active_ui(bank)
 	await _test_three_card_ui(stats, bank)
 	await _test_roulette_baccarat_ui(stats, bank)
+	await _test_roulette_animation(stats, bank)
 	await _test_backup(stats, bank)
 	GameSave.clear()
 
@@ -1218,6 +1220,43 @@ func _test_active_ui(bank: BankrollState) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
 
 
+func _test_roulette_animation(stats: StatsState, bank: BankrollState) -> void:
+	bank.use_profile("")
+	bank.set_to(1000)
+	stats.reset_stats()
+	var screen: Node = _mount("res://scenes/roulette.tscn")
+	await _frames(3)
+	var e: RouletteEngine = screen.get("engine") as RouletteEngine
+	e.add_bet("black", 100)
+	e.rng.seed = 21
+	_check(_press(screen, "Lancer la bille"), "roulette animée : lancer")
+	await _frames(3)
+	_check(bool(screen.get("_animating")) and stats.ro_rounds == 0, "roulette animée : résultat caché pendant la rotation")
+	_check(_find_button(screen, "Rejouer") == null, "roulette animée : pas de « Rejouer » avant la fin")
+	await create_timer(3.2).timeout
+	_check(not bool(screen.get("_animating")) and stats.ro_rounds == 1, "roulette animée : résultat révélé et enregistré")
+	_check(_find_button(screen, "Rejouer") != null, "roulette animée : « Rejouer » disponible")
+	# Jetons volants : des sprites apparaissent puis disparaissent d'eux-mêmes.
+	ChipFly.enabled = true
+	var from: Control = screen.get("_bank") as Control
+	var to: Control = screen.get("_result_chip") as Control
+	ChipFly.fly(from, to, 50, 3)
+	await _frames(2)
+	var sprites: int = 0
+	for n: Node in root.get_children():
+		if n is ChipFly.Sprite:
+			sprites += 1
+	_check(sprites == 3, "jetons volants : 3 jetons en vol (%d)" % sprites)
+	await create_timer(1.3).timeout
+	sprites = 0
+	for n: Node in root.get_children():
+		if n is ChipFly.Sprite:
+			sprites += 1
+	_check(sprites == 0, "jetons volants : retirés à l'arrivée (%d)" % sprites)
+	ChipFly.enabled = false
+	await _unmount(screen)
+
+
 func _test_roulette_baccarat_ui(stats: StatsState, bank: BankrollState) -> void:
 	bank.use_profile("")
 	bank.set_to(1000)
@@ -1240,6 +1279,7 @@ func _test_roulette_baccarat_ui(stats: StatsState, bank: BankrollState) -> void:
 	await _frames(2)
 	_check(e.bet_on("n:17") == 25 and e.total_bet() == 35, "roulette : jeton de 25 sur le 17")
 	_check(not _find_button(screen, "Lancer la bille").disabled, "roulette : « Lancer » actif")
+	screen.set("skip_animation", true)
 	e.rng.seed = 5
 	_check(_press(screen, "Lancer la bille"), "roulette : lancer")
 	await _frames(3)

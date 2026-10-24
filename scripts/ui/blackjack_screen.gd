@@ -22,6 +22,7 @@ var _controls: VBoxContainer
 var _dealer_timer: Timer
 var _last_message: String = ""
 var _bet_pile: ChipPile
+var _felt_node: Control
 
 
 func _ready() -> void:
@@ -87,6 +88,7 @@ func _build_felt() -> Control:
 	var col: VBoxContainer = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	var felt: PanelContainer = UIKit.table(col, 16)
+	_felt_node = felt
 
 	col.add_child(UIKit.label("CROUPIER", 12, UIKit.TEXT_SOFT, true))
 	_dealer_row = CardRow.new(1.0, 2)
@@ -199,7 +201,16 @@ func _banner_kind() -> int:
 	return UIKit.Banner.NEUTRAL
 
 
+func _on_chip(v: int, from: Control) -> void:
+	ChipFly.fly(from, _bet_pile, v, 2)
+	engine.add_to_bet(v)
+
+
 func _on_round_finished(outcome: int, net: int) -> void:
+	if net > 0:
+		ChipFly.fly(_felt_node, _bank, net)
+	elif net < 0:
+		ChipFly.fly_away(_felt_node, -net)
 	Stats.record_blackjack(outcome, net)
 	var bj_extra: Dictionary = {"blackjacks": 1} if outcome == BlackjackEngine.Outcome.BLACKJACK else {}
 	ProfileStore.record_active("bj", net > 0, net, -1, bj_extra)
@@ -269,7 +280,7 @@ func _build_bet_panel() -> Control:
 	for v: int in CHIP_VALUES:
 		var chip_btn: ChipButton = ChipButton.new(v)
 		chip_btn.disabled = engine.bet + v > Bankroll.value
-		chip_btn.pressed.connect(engine.add_to_bet.bind(v))
+		chip_btn.pressed.connect(_on_chip.bind(v, chip_btn))
 		chips.add_child(chip_btn)
 	col.add_child(chips)
 
