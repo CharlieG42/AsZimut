@@ -35,6 +35,14 @@ Poker à **3 cartes** contre la banque, avec les jetons de votre banque :
 - **Bonus d'Ante** (quinte 1:1, brelan 4:1, quinte flush 5:1), payé quand on joue même si le croupier gagne. **Pair Plus** indépendant du croupier : paire 1:1, couleur 4:1, quinte 6:1, brelan 30:1, quinte flush 40:1.
 - Mode débutant : conseil « jouer dès Dame-6-4 ». Statistiques globales et par joueur (couchés, Pair Plus gagnés), 3 succès.
 
+### Roulette (européenne, solo)
+37 cases (un seul 0), avec les jetons de votre banque :
+- Choisissez un jeton puis touchez le tapis : **plein** 35:1, **douzaine** et **colonne** 2:1, **rouge/noir**, **pair/impair**, **1-18/19-36** 1:1. Plusieurs mises par tirage ; le 0 fait perdre toutes les mises sauf celles sur le 0.
+- « Rejouer » conserve les mises ; historique des 12 derniers numéros ; statistiques globales et par joueur (pleins touchés), 2 succès.
+
+### Baccarat (punto banco, solo)
+Pariez sur **Joueur** (1:1), **Banquier** (1:1 moins 5 % de commission) ou **Égalité** (8:1, Joueur/Banquier rendus) ; les cartes se tirent selon les règles fixes du punto banco (naturels 8/9, 3e carte du Joueur à 0-5, tableau du Banquier). Historique J/B/É, mode débutant, statistiques, 2 succès.
+
 ### Dutch (variante « Cabo », 2 à 5 joueurs)
 Jeu de mémoire sans mise : **le moins de points gagne**. Disponible **seul contre ZIA** (tuile de l'accueil) ou **à plusieurs sur le même appareil** (Multijoueur local → Dutch, avec sièges IA possibles).
 - 4 cartes face cachées par joueur, 2 connues au départ (pastille dorée = carte mémorisée, affichée face visible pour son propriétaire).
@@ -55,7 +63,7 @@ La partie est indépendante de la banque et des statistiques solo.
 - Quitter avant la fin (deux appuis) rend les mises en cours et affiche le classement.
 
 ### Aide, mode débutant et tutoriel
-- **Tutoriel au lancement** : 7 pages (règles du blackjack, du poker, du Three Card Poker et de Dutch, classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
+- **Tutoriel au lancement** : 7 pages (règles du blackjack, du poker, du Three Card Poker et de Dutch (la roulette et le baccarat ont leur bouton « ? »), classement des mains, multijoueur et aide). Une case « Ne plus afficher au démarrage » le désactive ; **Options → « Revoir le tutoriel »** le relance à tout moment (et « Afficher le tutoriel au démarrage » le réactive).
 - **Bouton « ? »** dans chaque partie : rappel des règles (et du classement des mains au poker).
 - **Écran Options** en trois onglets sous un en-tête fixe : **Réglages**, **Statistiques** (banque, courbe, stats par jeu) et **Succès**.
   Défilement tactile maison (`TouchScroll`) : on fait glisser la page en partant de n'importe où, même d'un bouton
@@ -141,6 +149,8 @@ scripts/
 │   ├── poker_engine.gd            # Moteur poker heads-up (machine à états + IA ZIA)
 │   ├── multi_blackjack_engine.gd  # Blackjack 2–5 joueurs (même appareil)
 │   ├── poker_table_engine.gd      # Poker 2–6 joueurs : blinds croissantes, pots annexes
+│   ├── roulette_engine.gd         # Roulette européenne : mises, gains
+│   ├── baccarat_engine.gd         # Baccarat punto banco : règles de tirage, gains
 │   ├── three_card_engine.gd       # Three Card Poker : mains, Ante / Jeu / Pair Plus
 │   └── dutch_engine.gd            # Dutch 2–5 joueurs : pouvoirs, mémoire, IA
 └── ui/

@@ -6,7 +6,7 @@ extends RefCounted
 const START_BANK: int = 1000
 const MIN_BANK: int = 100
 const MAX_GROUPS: int = 6
-const GAME_KEYS: Array[String] = ["bj", "pk", "tc", "du"]
+const GAME_KEYS: Array[String] = ["bj", "pk", "tc", "ro", "ba", "du"]
 ## Nombre maximal de points conservés dans l'historique des gains cumulés d'un joueur.
 const HISTORY_MAX: int = 300
 
@@ -51,6 +51,8 @@ static func _empty_stats() -> Dictionary:
 		"bj": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "blackjacks": 0, "net": 0},
 		"pk": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "splits": 0, "biggest_pot": 0, "net": 0},
 		"tc": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "folds": 0, "pair_plus_wins": 0, "net": 0},
+		"ro": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "net": 0},
+		"ba": {"games": 0, "wins": 0, "losses": 0, "pushes": 0, "net": 0},
 		"du": {"games": 0, "wins": 0, "best": -1},
 	}
 
@@ -329,7 +331,7 @@ static func total_net_of(p: Dictionary) -> int:
 		return int((hist[hist.size() - 1] as Array)[1])
 	var stats: Dictionary = p.get("stats", {})
 	var total: int = 0
-	for key: String in ["bj", "pk", "tc"]:
+	for key: String in ["bj", "pk", "tc", "ro", "ba"]:
 		total += int((stats.get(key, {}) as Dictionary).get("net", 0))
 	return total
 
@@ -370,6 +372,12 @@ static func summary(id: String) -> Array[String]:
 	var tc: Dictionary = stats.get("tc", {})
 	if int(tc.get("games", 0)) > 0:
 		lines.append("Three Card : %d partie(s), %d gagnée(s), %s jetons" % [int(tc["games"]), int(tc["wins"]), UIKit.signed(int(tc["net"]))])
+	var ro: Dictionary = stats.get("ro", {})
+	if int(ro.get("games", 0)) > 0:
+		lines.append("Roulette : %d partie(s), %d gagnée(s), %s jetons" % [int(ro["games"]), int(ro["wins"]), UIKit.signed(int(ro["net"]))])
+	var ba: Dictionary = stats.get("ba", {})
+	if int(ba.get("games", 0)) > 0:
+		lines.append("Baccarat : %d partie(s), %d gagnée(s), %s jetons" % [int(ba["games"]), int(ba["wins"]), UIKit.signed(int(ba["net"]))])
 	var du: Dictionary = stats.get("du", {})
 	if int(du.get("games", 0)) > 0:
 		lines.append("Dutch : %d partie(s), %d gagnée(s), meilleur total %d" % [int(du["games"]), int(du["wins"]), int(du["best"])])

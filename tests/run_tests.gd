@@ -32,6 +32,8 @@ func _initialize() -> void:
 	_test_profiles()
 	_test_active_player()
 	_test_three_card()
+	_test_roulette()
+	_test_baccarat()
 	_test_double_down()
 	print("")
 	print("%d vérifications, %d échec(s)" % [_checks, _failures])
@@ -1315,6 +1317,124 @@ func _tc_round(bank: BankrollState, p: Array, d: Array, ante: int, pair_plus: in
 	else:
 		e.fold()
 	return e
+
+
+func _test_roulette() -> void:
+	_check(RouletteEngine.is_red(1) and RouletteEngine.is_red(36) and not RouletteEngine.is_red(2) and RouletteEngine.color_of(0) == "green", "roulette : couleurs")
+	var reds: int = 0
+	for n: int in range(1, 37):
+		if RouletteEngine.is_red(n):
+			reds += 1
+	_check(reds == 18, "roulette : 18 rouges")
+	_check(RouletteEngine.odds("n:17", 17) == 35 and RouletteEngine.odds("n:17", 18) == 0, "roulette : plein 35 contre 1")
+	_check(RouletteEngine.odds("n:0", 0) == 35 and RouletteEngine.odds("red", 0) == 0 and RouletteEngine.odds("low", 0) == 0, "roulette : le 0 ne gagne que sur le plein")
+	_check(RouletteEngine.odds("dozen:1", 12) == 2 and RouletteEngine.odds("dozen:2", 13) == 2 and RouletteEngine.odds("dozen:3", 36) == 2 and RouletteEngine.odds("dozen:1", 13) == 0, "roulette : douzaines")
+	_check(RouletteEngine.odds("col:1", 1) == 2 and RouletteEngine.odds("col:1", 34) == 2 and RouletteEngine.odds("col:2", 35) == 2 and RouletteEngine.odds("col:3", 36) == 2 and RouletteEngine.odds("col:3", 35) == 0, "roulette : colonnes")
+	_check(RouletteEngine.odds("even", 2) == 1 and RouletteEngine.odds("odd", 2) == 0 and RouletteEngine.odds("low", 18) == 1 and RouletteEngine.odds("high", 18) == 0 and RouletteEngine.odds("high", 19) == 1, "roulette : chances simples")
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	var e: RouletteEngine = RouletteEngine.new(bank)
+	_check(not e.can_spin(), "roulette : pas de lancer sans mise")
+	e.add_bet("n:17", 10)
+	e.add_bet("red", 50)
+	e.add_bet("red", 50)
+	_check(e.total_bet() == 110 and e.bet_on("red") == 100, "roulette : mises cumulées")
+	e.spin(17)
+	# 17 est noir : plein 10 x36 = 360, rouge perdu : 360 - 110.
+	_check(e.net == 250 and bank.value == 1000 + 250 and e.phase == RouletteEngine.Phase.DONE, "roulette : plein payé 35:1 (net %d)" % e.net)
+	e.replay()
+	_check(e.total_bet() == 110 and e.phase == RouletteEngine.Phase.BET, "roulette : rejouer garde les mises")
+	e.spin(0)
+	_check(e.net == -110 and bank.value == 1140, "roulette : le 0 prend les mises extérieures")
+	e.replay()
+	e.clear_bets()
+	e.add_bet("dozen:3", 20)
+	e.add_bet("col:2", 20)
+	e.spin(35)
+	# 35 : 3e douzaine (2:1) et colonne 2 (2:1) : +40 +40.
+	_check(e.net == 80 and bank.pending == 0, "roulette : douzaine et colonne gagnantes")
+	bank.value = 20
+	e.replay()
+	_check(e.bets.is_empty(), "roulette : mises vidées si la banque ne suit plus")
+	e.add_bet("red", 50)
+	_check(e.total_bet() == 0, "roulette : mise refusée au-delà de la banque")
+	# Tirages aléatoires : la banque reste cohérente.
+	bank.value = 5000
+	e.rng.seed = 7
+	var seen: Dictionary = {}
+	for i: int in 200:
+		e.replay()
+		e.clear_bets()
+		e.add_bet("odd", 5)
+		var before: int = bank.value
+		e.spin()
+		seen[e.result] = true
+		if bank.value != before + e.net or e.result < 0 or e.result > 36:
+			_check(false, "roulette : banque incohérente au tirage %d" % i)
+			break
+	_check(seen.size() > 20 and e.history.size() == RouletteEngine.HISTORY_MAX, "roulette : tirages variés, historique borné")
+	bank.free()
+
+
+func _bacc(bank: BankrollState, cards: Array, bets: Array) -> BaccaratEngine:
+	var e: BaccaratEngine = BaccaratEngine.new(bank)
+	e.deck = _rigged_deck(cards)
+	for i: int in 3:
+		if int(bets[i]) > 0:
+			e.add_bet(i, int(bets[i]))
+	e.deal()
+	return e
+
+
+func _test_baccarat() -> void:
+	_check(BaccaratEngine.card_value(Cards.make(14, 0)) == 1 and BaccaratEngine.card_value(Cards.make(10, 0)) == 0 and BaccaratEngine.card_value(Cards.make(13, 1)) == 0 and BaccaratEngine.card_value(Cards.make(9, 2)) == 9, "baccarat : valeur des cartes")
+	_check(BaccaratEngine.total(_hand([[7, 0], [8, 1]])) == 5, "baccarat : 7 + 8 = 5")
+	_check(BaccaratEngine.player_draws(5) and not BaccaratEngine.player_draws(6), "baccarat : le Joueur tire jusqu'à 5")
+	_check(BaccaratEngine.banker_draws(5, -1) and not BaccaratEngine.banker_draws(6, -1), "baccarat : Banquier sans 3e carte du Joueur")
+	_check(BaccaratEngine.banker_draws(2, 9) and not BaccaratEngine.banker_draws(3, 8) and BaccaratEngine.banker_draws(3, 7), "baccarat : Banquier 2 et 3")
+	_check(BaccaratEngine.banker_draws(4, 2) and not BaccaratEngine.banker_draws(4, 1) and not BaccaratEngine.banker_draws(4, 8), "baccarat : Banquier 4")
+	_check(BaccaratEngine.banker_draws(5, 4) and not BaccaratEngine.banker_draws(5, 3) and BaccaratEngine.banker_draws(6, 7) and not BaccaratEngine.banker_draws(6, 5) and not BaccaratEngine.banker_draws(7, 0), "baccarat : Banquier 5, 6 et 7")
+	var bank: BankrollState = BankrollState.new()
+	bank.persist = false
+	bank.value = 1000
+	# Ordre de distribution : Joueur, Banquier, Joueur, Banquier, puis 3es cartes.
+	# Naturel du Joueur (9) contre 7 : personne ne tire.
+	var e1: BaccaratEngine = _bacc(bank, [[4, 0], [3, 1], [5, 2], [4, 3]], [100, 0, 0])
+	_check(e1.player.size() == 2 and e1.banker.size() == 2 and e1.winner == BaccaratEngine.Spot.PLAYER and e1.net == 100 and bank.value == 1100, "baccarat : naturel, Joueur gagne 1:1")
+	# Banquier gagne 7 contre 6 (Joueur 6 reste, Banquier 5 tire).
+	bank.value = 1000
+	var e2: BaccaratEngine = _bacc(bank, [[2, 0], [3, 1], [4, 2], [2, 3], [2, 0]], [0, 100, 0])
+	_check(e2.player.size() == 2 and e2.banker.size() == 3 and BaccaratEngine.total(e2.banker) == 7 and e2.winner == BaccaratEngine.Spot.BANKER, "baccarat : Joueur 6 reste, Banquier 5 tire et gagne")
+	_check(e2.net == 95 and bank.value == 1095, "baccarat : Banquier payé avec 5 %% de commission (net %d)" % e2.net)
+	# Égalité 7-7 : Joueur / Banquier rendus, Égalité payée 8:1.
+	bank.value = 1000
+	var e3: BaccaratEngine = _bacc(bank, [[4, 0], [3, 1], [3, 2], [4, 3]], [50, 50, 10])
+	_check(e3.winner == BaccaratEngine.Spot.TIE and e3.net == 80 and bank.value == 1080, "baccarat : égalité 8:1, autres mises rendues (net %d)" % e3.net)
+	# Perte : mise Joueur quand le Banquier gagne.
+	bank.value = 1000
+	var e4: BaccaratEngine = _bacc(bank, [[2, 0], [9, 1], [3, 2], [0 + 10, 3]], [100, 0, 0])
+	_check(e4.winner == BaccaratEngine.Spot.BANKER and e4.net == -100 and bank.value == 900 and bank.pending == 0, "baccarat : mise Joueur perdue")
+	e4.replay()
+	_check(e4.bets[0] == 100 and e4.phase == BaccaratEngine.Phase.BET, "baccarat : rejouer garde les mises")
+	# Parties aléatoires : cohérence de la banque et du nombre de cartes.
+	bank.value = 100000
+	var e5: BaccaratEngine = BaccaratEngine.new(bank)
+	e5.rng.seed = 11
+	var ok: bool = true
+	var tally: Array[int] = [0, 0, 0]
+	for i: int in 300:
+		e5.replay()
+		e5.clear_bets()
+		e5.add_bet(i % 3, 10)
+		var before: int = bank.value
+		e5.deal()
+		tally[e5.winner] += 1
+		if bank.value != before + e5.net or e5.player.size() < 2 or e5.player.size() > 3 or e5.banker.size() < 2 or e5.banker.size() > 3:
+			ok = false
+	_check(ok, "baccarat : 300 manches cohérentes")
+	_check(tally[0] > 80 and tally[1] > 80 and tally[2] > 10 and tally[2] < 80, "baccarat : répartition plausible %s" % str(tally))
+	bank.free()
 
 
 func _test_three_card() -> void:

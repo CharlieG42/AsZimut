@@ -3,6 +3,8 @@ extends Control
 
 const BLACKJACK_SCENE: String = "res://scenes/blackjack.tscn"
 const THREE_CARD_SCENE: String = "res://scenes/three_card.tscn"
+const ROULETTE_SCENE: String = "res://scenes/roulette.tscn"
+const BACCARAT_SCENE: String = "res://scenes/baccarat.tscn"
 const POKER_SCENE: String = "res://scenes/poker.tscn"
 const STATS_SCENE: String = "res://scenes/stats.tscn"
 const ABOUT_SCENE: String = "res://scenes/about.tscn"
@@ -60,7 +62,7 @@ func _ready() -> void:
 		_logo_cards.append(view)
 
 	col.add_child(UIKit.label("AsZimut", 40, UIKit.GOLD, true))
-	col.add_child(UIKit.label("Blackjack, Poker, Three Card & Dutch", 14, UIKit.TEXT_SOFT))
+	col.add_child(UIKit.label("Blackjack, Poker, Roulette, Baccarat & plus", 14, UIKit.TEXT_SOFT))
 	col.add_child(UIKit.spacer(4))
 
 	_player_button = UIKit.outline_button("", UIKit.TEXT_SOFT, 14)
@@ -141,6 +143,22 @@ func _ready() -> void:
 	)
 	tcp_card.pressed.connect(_open.bind(THREE_CARD_SCENE))
 	col.add_child(tcp_card)
+
+	var roulette_card: GameCard = GameCard.new(
+		"Roulette",
+		"Roulette européenne : pleins, couleurs, douzaines, colonnes.",
+		[Cards.make(14, Cards.Suit.HEARTS), Cards.make(10, Cards.Suit.CLUBS)] as Array[int]
+	)
+	roulette_card.pressed.connect(_open.bind(ROULETTE_SCENE))
+	col.add_child(roulette_card)
+
+	var baccarat_card: GameCard = GameCard.new(
+		"Baccarat",
+		"Punto banco : Joueur, Banquier ou Égalité.",
+		[Cards.make(9, Cards.Suit.SPADES), Cards.make(13, Cards.Suit.DIAMONDS)] as Array[int]
+	)
+	baccarat_card.pressed.connect(_open.bind(BACCARAT_SCENE))
+	col.add_child(baccarat_card)
 
 	var dutch_card: GameCard = GameCard.new(
 		"Dutch",

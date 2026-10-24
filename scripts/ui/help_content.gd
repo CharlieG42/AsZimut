@@ -2,7 +2,7 @@ class_name HelpContent
 extends RefCounted
 ## Textes d'aide (règles, conseils) partagés par le tutoriel et le bouton « ? ».
 
-enum Topic { BLACKJACK, POKER, DUTCH, THREE_CARD }
+enum Topic { BLACKJACK, POKER, DUTCH, THREE_CARD, ROULETTE, BACCARAT }
 
 ## Exemples de mains pour le classement : [nom, description, cartes [rang, couleur]].
 const HANDS: Array[Array] = [
@@ -24,6 +24,10 @@ static func title(topic: int) -> String:
 		return "Dutch"
 	if topic == Topic.THREE_CARD:
 		return "Three Card Poker"
+	if topic == Topic.ROULETTE:
+		return "Roulette"
+	if topic == Topic.BACCARAT:
+		return "Baccarat"
 	return "Blackjack" if topic == Topic.BLACKJACK else "Poker Hold'em"
 
 
@@ -34,6 +38,10 @@ static func sections(topic: int) -> Array[Dictionary]:
 		return dutch_sections()
 	if topic == Topic.THREE_CARD:
 		return three_card_sections()
+	if topic == Topic.ROULETTE:
+		return roulette_sections()
+	if topic == Topic.BACCARAT:
+		return baccarat_sections()
 	return poker_sections()
 
 
@@ -152,6 +160,61 @@ static func three_card_sections() -> Array[Dictionary]:
 	]
 
 
+static func roulette_sections() -> Array[Dictionary]:
+	return [
+		{
+			"title": "But du jeu",
+			"text":
+			"Miser sur le numéro (de 0 à 36) où la bille s'arrêtera. Roulette européenne : une seule case 0, qui donne un petit avantage à la banque.",
+		},
+		{
+			"title": "Une manche",
+			"text":
+			"1. Choisissez un jeton, puis touchez le tapis pour miser (plusieurs mises possibles, au moins 5 en tout).\n2. Touchez « Lancer la bille ».\n3. Les mises gagnantes sont payées, les autres perdues. « Rejouer » conserve vos mises.",
+		},
+		{
+			"title": "Gains",
+			"text":
+			"Plein (un numéro) : 35 contre 1.\nDouzaine (1-12, 13-24, 25-36) ou colonne : 2 contre 1.\nRouge/noir, pair/impair, 1-18/19-36 : 1 contre 1.\nLe 0 fait perdre toutes les mises, sauf celles posées sur le 0 lui-même.",
+		},
+		{
+			"title": "Astuces",
+			"text":
+			"C'est un jeu de pur hasard : les tirages passés n'influencent pas le suivant. Les chances simples perdent le moins souvent ; un plein est rare mais très bien payé. Fixez-vous un budget.",
+		},
+	]
+
+
+static func baccarat_sections() -> Array[Dictionary]:
+	return [
+		{
+			"title": "But du jeu",
+			"text":
+			"Deviner quelle main, Joueur ou Banquier, sera la plus proche de 9 (ou si elles seront à égalité). Vous ne tirez aucune carte : tout suit des règles fixes.",
+		},
+		{
+			"title": "Valeur des cartes",
+			"text":
+			"L'As vaut 1, les cartes de 2 à 9 leur numéro, le 10 et les figures 0. Le total d'une main est le chiffre des unités (7 + 8 = 15 → 5).",
+		},
+		{
+			"title": "Une manche",
+			"text":
+			"Joueur et Banquier reçoivent 2 cartes. Avec 8 ou 9 (« naturel »), personne ne tire. Sinon le Joueur tire une 3e carte avec 0 à 5 et reste avec 6 ou 7 ; le Banquier tire ensuite selon un tableau fixe, qui dépend de son total et de la 3e carte du Joueur.",
+		},
+		{
+			"title": "Gains",
+			"text":
+			"Joueur : 1 contre 1.\nBanquier : 1 contre 1 moins 5 % de commission.\nÉgalité : 8 contre 1 ; en cas d'égalité, les mises Joueur et Banquier sont rendues.",
+		},
+		{
+			"title": "Astuces",
+			"text":
+			"Le Banquier gagne un peu plus souvent, même après commission : c'est la mise la plus favorable. L'Égalité paie bien mais sort environ 1 fois sur 10 : c'est la plus coûteuse à long terme.",
+		},
+	]
+
+
 static func app_sections() -> Array[Dictionary]:
 	return [
 		{
@@ -176,9 +239,9 @@ static func app_sections() -> Array[Dictionary]:
 static func tutorial_pages() -> Array[Dictionary]:
 	var welcome: Array[Dictionary] = [
 		{
-			"title": "Quatre jeux",
+			"title": "Six jeux",
 			"text":
-			"Blackjack et Three Card Poker contre le croupier, Poker Hold'em contre ZIA, notre IA, et Dutch, un jeu de mémoire sans mise. Votre banque de jetons est commune aux jeux d'argent ; elle se sauvegarde sur l'appareil.",
+			"Blackjack, Three Card Poker, roulette et baccarat contre la banque, Poker Hold'em contre ZIA, notre IA, et Dutch, un jeu de mémoire sans mise. Votre banque de jetons est commune aux jeux d'argent ; elle se sauvegarde sur l'appareil.",
 		},
 		{
 			"title": "Ce tutoriel",

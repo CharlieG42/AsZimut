@@ -81,6 +81,7 @@ func _run() -> void:
 	await _test_profiles_ui()
 	await _test_active_ui(bank)
 	await _test_three_card_ui(stats, bank)
+	await _test_roulette_baccarat_ui(stats, bank)
 	await _test_backup(stats, bank)
 	GameSave.clear()
 
@@ -1217,6 +1218,62 @@ func _test_active_ui(bank: BankrollState) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ProfileStore.path))
 
 
+func _test_roulette_baccarat_ui(stats: StatsState, bank: BankrollState) -> void:
+	bank.use_profile("")
+	bank.set_to(1000)
+	stats.reset_stats()
+	# Roulette : miser sur le tapis, lancer, vérifier la banque et les statistiques.
+	var screen: Node = _mount("res://scenes/roulette.tscn")
+	await _frames(3)
+	var e: RouletteEngine = screen.get("engine") as RouletteEngine
+	_check(e != null and e.phase == RouletteEngine.Phase.BET, "roulette : moteur en phase de mise")
+	var spin: Button = _find_button(screen, "Lancer la bille")
+	_check(spin != null and spin.disabled, "roulette : « Lancer » inactif sans mise")
+	var red: Button = _find_button(screen, "Rouge")
+	_check(red != null, "roulette : case Rouge présente")
+	red.pressed.emit()
+	await _frames(2)
+	_check(e.bet_on("red") == 10, "roulette : jeton de 10 posé sur Rouge")
+	screen.call("_select_chip", 25)
+	await _frames(2)
+	_find_button(screen, "17").pressed.emit()
+	await _frames(2)
+	_check(e.bet_on("n:17") == 25 and e.total_bet() == 35, "roulette : jeton de 25 sur le 17")
+	_check(not _find_button(screen, "Lancer la bille").disabled, "roulette : « Lancer » actif")
+	e.rng.seed = 5
+	_check(_press(screen, "Lancer la bille"), "roulette : lancer")
+	await _frames(3)
+	_check(e.phase == RouletteEngine.Phase.DONE and e.result >= 0 and bank.value == 1000 + e.net, "roulette : manche réglée (banque %d)" % bank.value)
+	_check(stats.ro_rounds == 1, "roulette : statistique enregistrée")
+	_check(_press(screen, "Rejouer"), "roulette : rejouer")
+	await _frames(2)
+	_check(e.phase == RouletteEngine.Phase.BET and e.total_bet() == 35, "roulette : mises conservées")
+	await _unmount(screen)
+
+	# Baccarat : jetons sur le Banquier, distribution.
+	bank.set_to(1000)
+	screen = _mount("res://scenes/baccarat.tscn")
+	await _frames(3)
+	var b: BaccaratEngine = screen.get("engine") as BaccaratEngine
+	_check(b != null and b.phase == BaccaratEngine.Phase.BET, "baccarat : moteur en phase de mise")
+	_check(_find_button(screen, "Distribuer").disabled, "baccarat : « Distribuer » inactif sans mise")
+	screen.call("_select_target", BaccaratEngine.Spot.BANKER)
+	await _frames(2)
+	var chip: Node = screen.find_children("*", "ChipButton", true, false)[1]
+	(chip as BaseButton).pressed.emit()
+	await _frames(2)
+	_check(b.bets[1] == 25, "baccarat : jeton sur le Banquier")
+	b.rng.seed = 3
+	_check(_press(screen, "Distribuer"), "baccarat : distribuer")
+	await _frames(3)
+	_check(b.phase == BaccaratEngine.Phase.DONE and b.player.size() >= 2 and b.banker.size() >= 2, "baccarat : cartes distribuées")
+	_check(bank.value == 1000 + b.net and stats.ba_rounds == 1, "baccarat : banque et statistiques (banque %d)" % bank.value)
+	_check(_press(screen, "Rejouer"), "baccarat : rejouer")
+	await _frames(2)
+	_check(b.phase == BaccaratEngine.Phase.BET and b.bets[1] == 25, "baccarat : mises conservées")
+	await _unmount(screen)
+
+
 func _test_three_card_ui(stats: StatsState, bank: BankrollState) -> void:
 	bank.use_profile("")
 	bank.set_to(1000)
@@ -1226,7 +1283,7 @@ func _test_three_card_ui(stats: StatsState, bank: BankrollState) -> void:
 	var tiles: int = 0
 	for n: Node in home.find_children("*", "GameCard", true, false):
 		tiles += 1
-	_check(tiles == 4, "accueil : quatre jeux (%d)" % tiles)
+	_check(tiles == 6, "accueil : six jeux (%d)" % tiles)
 	_unmount(home)
 
 	var screen: Node = _mount("res://scenes/three_card.tscn")

@@ -213,6 +213,8 @@ func _build_player_stats(id: String) -> void:
 	var bj: Dictionary = ProfileStore.game_stats(id, "bj")
 	var pk: Dictionary = ProfileStore.game_stats(id, "pk")
 	var tc: Dictionary = ProfileStore.game_stats(id, "tc")
+	var ro: Dictionary = ProfileStore.game_stats(id, "ro")
+	var ba: Dictionary = ProfileStore.game_stats(id, "ba")
 	var du: Dictionary = ProfileStore.game_stats(id, "du")
 	var total: int = ProfileStore.total_net(id)
 
@@ -220,8 +222,8 @@ func _build_player_stats(id: String) -> void:
 	_row(bank_box, "Actuelle", str(ProfileStore.bank_of(id)))
 	_row(bank_box, "Record", str(int(p.get("best_bank", ProfileStore.START_BANK))))
 	_row(bank_box, "Gains cumulés", UIKit.signed(total), _net_color(total))
-	_row(bank_box, "Parties jouées", str(int(bj["games"]) + int(pk["games"]) + int(tc["games"]) + int(du["games"])))
-	bank_box.add_child(_small("Gains cumulés (blackjack, poker, Three Card), partie après partie"))
+	_row(bank_box, "Parties jouées", str(int(bj["games"]) + int(pk["games"]) + int(tc["games"]) + int(ro["games"]) + int(ba["games"]) + int(du["games"])))
+	bank_box.add_child(_small("Gains cumulés (blackjack, poker, Three Card, roulette, baccarat), partie après partie"))
 	var chart: BankChart = BankChart.new(ProfileStore.history_values(id))
 	chart.baseline = 0
 	chart.empty_text = "Jouez quelques parties pour voir la courbe."
@@ -251,6 +253,14 @@ func _build_player_stats(id: String) -> void:
 	_row(tc_box, "Couchés", str(int(tc["folds"])))
 	_row(tc_box, "Pair Plus gagnés", str(int(tc["pair_plus_wins"])))
 	_row(tc_box, "Gain net", UIKit.signed(int(tc["net"])), _net_color(int(tc["net"])))
+
+	for entry: Array in [["Roulette", ro], ["Baccarat", ba]]:
+		var gb: VBoxContainer = _section(str(entry[0]))
+		var gs: Dictionary = entry[1]
+		_row(gb, "Parties", str(int(gs["games"])))
+		_row(gb, "Victoires", "%d  (%d %%)" % [int(gs["wins"]), StatsState.percent(int(gs["wins"]), int(gs["games"]))])
+		_row(gb, "Défaites", str(int(gs["losses"])))
+		_row(gb, "Gain net", UIKit.signed(int(gs["net"])), _net_color(int(gs["net"])))
 
 	var du_box: VBoxContainer = _section("Dutch")
 	_row(du_box, "Parties", str(int(du["games"])))
@@ -296,6 +306,20 @@ func _build_global_stats() -> void:
 	_row(tc, "Pair Plus gagnés", str(Stats.tc_pair_plus_wins))
 	_row(tc, "Brelans / quintes flush", "%d / %d" % [Stats.tc_trips, Stats.tc_straight_flushes])
 	_row(tc, "Gain net", UIKit.signed(Stats.tc_net), _net_color(Stats.tc_net))
+
+	var ro: VBoxContainer = _section("Roulette")
+	_row(ro, "Parties", str(Stats.ro_rounds))
+	_row(ro, "Victoires", "%d  (%d %%)" % [Stats.ro_wins, StatsState.percent(Stats.ro_wins, Stats.ro_rounds)])
+	_row(ro, "Défaites", str(Stats.ro_losses))
+	_row(ro, "Pleins touchés", str(Stats.ro_straight_hits))
+	_row(ro, "Gain net", UIKit.signed(Stats.ro_net), _net_color(Stats.ro_net))
+
+	var ba: VBoxContainer = _section("Baccarat")
+	_row(ba, "Parties", str(Stats.ba_rounds))
+	_row(ba, "Victoires", "%d  (%d %%)" % [Stats.ba_wins, StatsState.percent(Stats.ba_wins, Stats.ba_rounds)])
+	_row(ba, "Défaites", str(Stats.ba_losses))
+	_row(ba, "Égalités tirées", str(Stats.ba_ties))
+	_row(ba, "Gain net", UIKit.signed(Stats.ba_net), _net_color(Stats.ba_net))
 
 	var du: VBoxContainer = _section("Dutch (contre ZIA)")
 	_row(du, "Parties", str(Stats.du_games))
