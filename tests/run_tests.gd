@@ -601,12 +601,19 @@ func _test_multi_blackjack() -> void:
 					e.add_to_bet(mini(10 * r.randi_range(1, 5), s.stack))
 				e.confirm_bet()
 			guard = 0
-			while e.phase == MultiBlackjackEngine.Phase.PLAY and guard < 100:
+			while e.phase in [MultiBlackjackEngine.Phase.PLAY, MultiBlackjackEngine.Phase.INSURANCE] and guard < 100:
 				guard += 1
 				var roll: float = r.randf()
-				if roll < 0.15 and e.can_double():
+				if e.phase == MultiBlackjackEngine.Phase.INSURANCE:
+					if roll < 0.5 and e.can_insure():
+						e.take_insurance()
+					else:
+						e.decline_insurance()
+				elif roll < 0.1 and e.can_split():
+					e.split()
+				elif roll < 0.25 and e.can_double():
 					e.double_down()
-				elif roll < 0.6 and BlackjackEngine.bj_value(e.seats[e.current].hand) < 17:
+				elif roll < 0.6 and BlackjackEngine.bj_value(e.seats[e.current].current_hand()) < 17:
 					e.hit()
 				else:
 					e.stand()
@@ -618,7 +625,7 @@ func _test_multi_blackjack() -> void:
 				if s.ready:
 					var delta: int = s.net
 					var v: int = BlackjackEngine.bj_value(s.hand)
-					if s.result == BlackjackEngine.Outcome.NONE or (s.result == BlackjackEngine.Outcome.LOSE and delta != -s.bet) or v < 0:
+					if s.result == BlackjackEngine.Outcome.NONE or (s.result == BlackjackEngine.Outcome.LOSE and delta > 0) or v < 0:
 						anomalies += 1
 				if s.stack < 0:
 					anomalies += 1
@@ -785,7 +792,7 @@ func _test_bots() -> void:
 				guard += 1
 				b.bot_bet()
 			guard = 0
-			while b.phase == MultiBlackjackEngine.Phase.PLAY and guard < 100:
+			while b.phase in [MultiBlackjackEngine.Phase.PLAY, MultiBlackjackEngine.Phase.INSURANCE] and guard < 100:
 				guard += 1
 				b.bot_play()
 			if b.phase != MultiBlackjackEngine.Phase.DEALER:
@@ -1514,4 +1521,37 @@ func _test_double_down() -> void:
 	_check(m.seats[0].stack == 1100 and m.seats[0].net == 100, "multi : gain doublé (+100)")
 	m.next_round()
 	_check(m.seats[0].bet == 50, "multi : la manche suivante reprend la mise de départ")
+	# Multijoueur : assurance contre un blackjack du croupier.
+	var mi: MultiBlackjackEngine = MultiBlackjackEngine.new(["A"] as Array[String], 1000)
+	mi.deck = _rigged_deck([[10, 0], [9, 1], [14, 0], [13, 1]])
+	mi.add_to_bet(50)
+	mi.confirm_bet()
+	_check(mi.phase == MultiBlackjackEngine.Phase.INSURANCE and mi.can_insure(), "multi : assurance proposée sur un As")
+	mi.take_insurance()
+	_check(mi.seats[0].stack == 925 and mi.phase == MultiBlackjackEngine.Phase.DEALER, "multi : assurance payée, blackjack du croupier")
+	mi.dealer_plays()
+	_check(mi.seats[0].stack == 1000 and mi.seats[0].net == 0, "multi : assurance 2 contre 1 compense la mise (pile %d)" % mi.seats[0].stack)
+	# Assurance refusée, pas de blackjack : la partie continue.
+	var mn: MultiBlackjackEngine = MultiBlackjackEngine.new(["A"] as Array[String], 1000)
+	mn.deck = _rigged_deck([[10, 0], [9, 1], [14, 0], [5, 1]])
+	mn.add_to_bet(50)
+	mn.confirm_bet()
+	mn.decline_insurance()
+	_check(mn.phase == MultiBlackjackEngine.Phase.PLAY and mn.current == 0 and mn.seats[0].stack == 950, "multi : assurance refusée, on joue")
+	# Multijoueur : split puis double sur la première main.
+	var ms: MultiBlackjackEngine = MultiBlackjackEngine.new(["A"] as Array[String], 1000)
+	ms.deck = _rigged_deck([[8, 0], [8, 1], [10, 3], [7, 2], [3, 0], [10, 1], [10, 2]])
+	ms.add_to_bet(50)
+	ms.confirm_bet()
+	_check(ms.can_split(), "multi : paire de 8 séparable")
+	ms.split()
+	_check(ms.seats[0].has_split and ms.seats[0].stack == 900 and ms.seats[0].hand.size() == 2, "multi : seconde mise prélevée")
+	ms.double_down()
+	_check(ms.seats[0].bet == 100 and ms.seats[0].stack == 850 and ms.seats[0].active_hand == 1, "multi split : main 1 doublée, on passe à la main 2")
+	ms.stand()
+	_check(ms.phase == MultiBlackjackEngine.Phase.DEALER, "multi split : fin du tour")
+	ms.dealer_plays()
+	_check(ms.seats[0].stack == 1150 and ms.seats[0].net == 150, "multi split : deux mains gagnantes (pile %d)" % ms.seats[0].stack)
+	ms.next_round()
+	_check(ms.seats[0].bet == 50 and not ms.seats[0].has_split and ms.seats[0].split_hand.is_empty(), "multi split : manche suivante propre")
 	bank.free()

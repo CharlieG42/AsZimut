@@ -415,11 +415,13 @@ func _test_multi_blackjack() -> void:
 			_check(_press(screen, "Valider la mise"), "valider la mise de %s" % engine.seats[expected].name)
 			await _frames(1)
 		var guard: int = 0
-		while engine.phase == MultiBlackjackEngine.Phase.PLAY and guard < 40:
+		while engine.phase in [MultiBlackjackEngine.Phase.PLAY, MultiBlackjackEngine.Phase.INSURANCE] and guard < 40:
 			guard += 1
 			var who: int = engine.current
 			var value: int = BlackjackEngine.bj_value(engine.seats[who].hand)
-			if value < 15 and _press(screen, "Carte"):
+			if engine.phase == MultiBlackjackEngine.Phase.INSURANCE:
+				_check(_press(screen, "Sans assurance"), "refuser l'assurance")
+			elif value < 15 and _press(screen, "Carte"):
 				pass
 			else:
 				_check(_press(screen, "Rester"), "rester")
@@ -754,6 +756,9 @@ func _test_bots_ui(stats: StatsState) -> void:
 			MultiBlackjackEngine.Phase.PLAY:
 				if not b.current_is_bot():
 					_press(bj, "Rester")
+			MultiBlackjackEngine.Phase.INSURANCE:
+				if not b.current_is_bot():
+					_press(bj, "Sans assurance")
 			MultiBlackjackEngine.Phase.DONE:
 				rounds += 1
 				_press(bj, "Manche suivante")

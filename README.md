@@ -13,7 +13,7 @@
 ### Blackjack
 - Croupier IA : tire jusqu'à 17, s'arrête sur un soft 17.
 - Blackjack payé **3:2**, **double** autorisé sur les deux premières cartes (aussi après un split).
-- **Split** d'une paire en deux mains (une fois ; As séparés = une carte chacun), **assurance** quand le croupier montre un As (moitié de la mise, payée 2:1), conseils de stratégie de base pour les deux.
+- **Split** d'une paire en deux mains (une fois ; As séparés = une carte chacun), **assurance** quand le croupier montre un As (moitié de la mise, payée 2:1), conseils de stratégie de base pour les deux. Aussi disponibles au blackjack local à plusieurs (les bots séparent selon la stratégie de base et refusent l'assurance).
 - Si l'appli est fermée en pleine manche, la mise est rendue au lancement suivant.
 - Mise par jetons de casino (10 / 25 / 50 / 100) avec pile de mise, banque commune de 1000 rechargeable.
 
@@ -220,7 +220,7 @@ Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.
 - [x] Sons (cartes, jetons, résultats)
 - [x] Animation de distribution des cartes
 - [x] Statistiques Dutch, succès, courbe de la banque
-- [ ] Split et assurance au blackjack local à plusieurs
+- [x] Split et assurance au blackjack local à plusieurs
 - [ ] Animation des jetons vers le pot
 - [ ] Plus de jeux (une future table de modules à la façon Sebae)
 

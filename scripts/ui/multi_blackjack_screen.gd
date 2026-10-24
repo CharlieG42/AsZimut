@@ -147,6 +147,9 @@ func _build_seat(i: int) -> Control:
 	right.add_theme_constant_override("separation", 4)
 	var cards: CardRow = CardRow.new(0.7, 2)
 	right.add_child(cards)
+	var cards2: CardRow = CardRow.new(0.7, 2)
+	cards2.visible = false
+	right.add_child(cards2)
 	var foot: HBoxContainer = HBoxContainer.new()
 	foot.alignment = BoxContainer.ALIGNMENT_CENTER
 	foot.add_theme_constant_override("separation", 8)
@@ -158,7 +161,7 @@ func _build_seat(i: int) -> Control:
 	row.add_child(right)
 
 	_seat_nodes.append(
-		{"panel": panel, "stack": stack, "bet": bet, "cards": cards, "total": total, "status": status}
+		{"panel": panel, "stack": stack, "bet": bet, "cards": cards, "cards2": cards2, "total": total, "status": status}
 	)
 	return panel
 
@@ -226,13 +229,23 @@ func _refresh_seat(i: int) -> void:
 	var bet_text: String = ""
 	if s.bet > 0 and not s.out:
 		bet_text = "Mise %d" % s.bet
+		if s.has_split:
+			bet_text = "Mise %d + %d" % [s.bet, s.split_bet]
+		if s.insurance > 0:
+			bet_text += "\nAssurance %d" % s.insurance
 	(n["bet"] as Label).text = bet_text
 
 	(n["cards"] as CardRow).set_cards(s.hand)
 	var total: PanelContainer = n["total"] as PanelContainer
+	var cards2: CardRow = n["cards2"] as CardRow
+	cards2.visible = s.has_split
+	cards2.set_cards(s.split_hand)
 	total.visible = not s.hand.is_empty()
 	if not s.hand.is_empty():
-		UIKit.chip_label(total).text = str(BlackjackEngine.bj_value(s.hand))
+		var total_text: String = str(BlackjackEngine.bj_value(s.hand))
+		if s.has_split:
+			total_text += " / %d" % BlackjackEngine.bj_value(s.split_hand)
+		UIKit.chip_label(total).text = total_text
 
 	var status: Label = n["status"] as Label
 	var text: String = ""
@@ -256,10 +269,18 @@ func _refresh_seat(i: int) -> void:
 				color = UIKit.TEXT_SOFT
 	elif is_current and engine.phase == MultiBlackjackEngine.Phase.PLAY:
 		text = "Joue…" if s.is_bot else "À vous"
+		if s.has_split:
+			text += " (main %d)" % (s.active_hand + 1)
+		color = UIKit.GOLD
+	elif is_current and engine.phase == MultiBlackjackEngine.Phase.INSURANCE:
+		text = "Assurance ?"
 		color = UIKit.GOLD
 	elif s.ready and s.done:
 		var value: int = BlackjackEngine.bj_value(s.hand)
-		if value > 21:
+		if s.has_split:
+			text = "Reste"
+			color = UIKit.TEXT_SOFT
+		elif value > 21:
 			text = "Dépasse"
 			color = UIKit.WARNING_TEXT
 		elif value == 21 and s.hand.size() == 2:
@@ -292,6 +313,8 @@ func _refresh_turn() -> void:
 				text = "%s réfléchit…" % engine.seats[engine.current].name
 			else:
 				text = "%s, à vous de jouer" % engine.seats[engine.current].name
+		MultiBlackjackEngine.Phase.INSURANCE:
+			text = "%s, assurance ?" % engine.seats[engine.current].name
 		MultiBlackjackEngine.Phase.DEALER:
 			text = "Le croupier joue…"
 		MultiBlackjackEngine.Phase.DONE:
@@ -311,13 +334,23 @@ func _rebuild_controls() -> void:
 				_controls.add_child(_thinking_label("%s mise…" % engine.seats[engine.current].name))
 			elif engine.current >= 0:
 				_controls.add_child(_build_bet_panel())
+		MultiBlackjackEngine.Phase.INSURANCE:
+			if engine.current_is_bot():
+				_controls.add_child(_thinking_label("%s réfléchit…" % engine.seats[engine.current].name))
+			else:
+				if Stats.beginner:
+					_controls.add_child(UIKit.advice_panel(BlackjackAdvisor.insurance_advice()))
+				_controls.add_child(_build_insurance_buttons())
 		MultiBlackjackEngine.Phase.PLAY:
 			if engine.current_is_bot():
 				_controls.add_child(_thinking_label("%s réfléchit…" % engine.seats[engine.current].name))
 			else:
 				if Stats.beginner:
-					var hand: Array[int] = engine.seats[engine.current].hand
+					var seat: MultiBlackjackEngine.Seat = engine.seats[engine.current]
+					var hand: Array[int] = seat.current_hand()
 					var advice: String = BlackjackAdvisor.explain(hand, engine.dealer[0], engine.can_double())
+					if engine.can_split() and BlackjackAdvisor.should_split(seat.hand, engine.dealer[0]):
+						advice = BlackjackAdvisor.explain_split(seat.hand, engine.dealer[0])
 					_controls.add_child(UIKit.advice_panel(advice))
 				_controls.add_child(_build_action_buttons())
 		MultiBlackjackEngine.Phase.DEALER:
@@ -390,11 +423,31 @@ func _build_action_buttons() -> Control:
 	stand.pressed.connect(engine.stand)
 	row.add_child(stand)
 
-	var dbl: Button = UIKit.button("Doubler (+%d)" % engine.seats[engine.current].bet, Color(0.2, 0.33, 0.28))
+	var dbl: Button = UIKit.button("Doubler (+%d)" % engine.seats[engine.current].current_bet(), Color(0.2, 0.33, 0.28))
 	dbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dbl.disabled = not engine.can_double()
 	dbl.pressed.connect(engine.double_down)
 	row.add_child(dbl)
+	if engine.can_split():
+		var sp: Button = UIKit.button("Séparer (+%d)" % engine.seats[engine.current].bet, Color(0.35, 0.25, 0.5))
+		sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sp.pressed.connect(engine.split)
+		row.add_child(sp)
+	return row
+
+
+func _build_insurance_buttons() -> Control:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var yes: Button = UIKit.button("Assurance (%d)" % engine.insurance_cost(), UIKit.GREEN_ACTION)
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yes.disabled = not engine.can_insure()
+	yes.pressed.connect(engine.take_insurance)
+	row.add_child(yes)
+	var no: Button = UIKit.button("Sans assurance", UIKit.GOLD, UIKit.INK)
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	no.pressed.connect(engine.decline_insurance)
+	row.add_child(no)
 	return row
 
 
@@ -411,7 +464,7 @@ func _on_bot_timer() -> void:
 	match engine.phase:
 		MultiBlackjackEngine.Phase.BET:
 			engine.bot_bet()
-		MultiBlackjackEngine.Phase.PLAY:
+		MultiBlackjackEngine.Phase.PLAY, MultiBlackjackEngine.Phase.INSURANCE:
 			engine.bot_play()
 
 
@@ -454,7 +507,7 @@ func _show_results() -> void:
 		# Une mise déjà engagée mais non réglée est rendue au joueur.
 		var stack: int = s.stack
 		if s.ready and engine.phase != MultiBlackjackEngine.Phase.DONE:
-			stack += s.bet
+			stack += s.staked()
 		rows.append({"name": s.name, "stack": stack, "start": LocalSession.start_for_name(s.name)})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["stack"]) > int(b["stack"]))
 	LocalSession.store_results(rows)
