@@ -1,4 +1,4 @@
-# Politique de confidentialité — AsZimut (brouillon à publier)
+# Politique de confidentialité — AsZimut
 
 À héberger sur une URL publique (GitHub Pages de ce dépôt, ou site de WildZimut), puis à
 renseigner dans la Play Console (App content → Privacy policy). Remplacer les champs entre
@@ -8,10 +8,10 @@ crochets avant publication.
 
 # Privacy Policy — AsZimut
 
-**Éditeur / Publisher** : WildZimut ([adresse postale à compléter])
-**Contact** : [e-mail de contact à compléter]
+**Éditeur / Publisher** : WildZimut
+**Contact** : gentilcharlie@gmail.com
 **Application** : AsZimut (package `com.wildzimut.aszimut`)
-**Dernière mise à jour** : [date]
+**Dernière mise à jour** : 27/11/2026
 
 ## Français
 
