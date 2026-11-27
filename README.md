@@ -195,7 +195,8 @@ godot --headless --path . --script res://tests/smoke_test.gd
 ## CI/CD
 
 Le workflow [Build AAB](.github/workflows/build-aab.yml) (image `barichello/godot-ci`), déclenché sur `main` et sur les PR :
-1. Prépare les templates d'export et les réglages Android,
+1. Prépare les templates d'export, les réglages Android et un **miroir Maven Central** pour Gradle
+   (init script `~/.gradle/init.d`, pour éviter les 429 de `repo.maven.apache.org` depuis les IP de CI),
 2. Importe le projet, lance les **tests logiques** et le **test de fumée** (bloquants),
 3. Choisit la clé de signature (voir ci-dessous),
 4. Numérote la version `0.0.01.xxx.yyy` (affichée dans **À propos**) : `xxx` = numéro de la dernière PR fusionnée (API GitHub), `yyy` = numéro du run (= du push). Décalages réglables via les variables de dépôt `PR_OFFSET` et `PUSH_OFFSET` (Settings → Variables → Actions) ; sans réponse de l'API, `xxx` vaut 000. `versionCode` = numéro de run. En local : `0.0.01.000.000`.

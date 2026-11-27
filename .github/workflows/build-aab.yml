@@ -62,6 +62,37 @@ jobs:
           yes | "$SDKM" --sdk_root="$ANDROID_DIR" --licenses > /dev/null || true
           "$SDKM" --sdk_root="$ANDROID_DIR" "platform-tools" "build-tools;35.0.1" "build-tools;36.0.0" "platforms;android-35" "platforms;android-36"
 
+      - name: Miroir Maven Central pour Gradle (évite les 429 de repo.maven.apache.org en CI)
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/maven-mirror.gradle" <<'GRADLE_INIT'
+          def MIRROR = "https://maven-central.storage-download.googleapis.com/maven2/"
+          allprojects {
+              buildscript {
+                  repositories {
+                      maven { url MIRROR }
+                      maven { url "https://maven.google.com" }
+                  }
+              }
+              repositories {
+                  maven { url MIRROR }
+                  maven { url "https://maven.google.com" }
+              }
+          }
+          settingsEvaluated { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      maven { url MIRROR }
+                      maven { url "https://maven.google.com" }
+                      gradlePluginPortal()
+                      google()
+                      mavenCentral()
+                  }
+              }
+          }
+          GRADLE_INIT
+          cat "$HOME/.gradle/init.d/maven-mirror.gradle"
+
       - name: Import des ressources
         run: godot --headless --path . --import || true
 
@@ -121,6 +152,7 @@ jobs:
 
       - name: Export de l'AAB (release, build Gradle, targetSdk 36)
         run: |
+          export GRADLE_USER_HOME="$HOME/.gradle"
           mkdir -p build
           godot --headless --path . --install-android-build-template --export-release "Android" build/aszimut.aab
           ls -l build/
