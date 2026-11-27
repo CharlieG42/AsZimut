@@ -122,7 +122,7 @@ jobs:
       - name: Export de l'AAB (release, build Gradle, targetSdk 36)
         run: |
           mkdir -p build
-          godot --headless --path . --export-release "Android" build/aszimut.aab
+          godot --headless --path . --install-android-build-template --export-release "Android" build/aszimut.aab
           ls -l build/
 
       - name: Résumé

@@ -199,7 +199,7 @@ Le workflow [Build AAB](.github/workflows/build-aab.yml) (image `barichello/godo
 2. Importe le projet, lance les **tests logiques** et le **test de fumée** (bloquants),
 3. Choisit la clé de signature (voir ci-dessous),
 4. Numérote la version `0.0.01.xxx.yyy` (affichée dans **À propos**) : `xxx` = numéro de la dernière PR fusionnée (API GitHub), `yyy` = numéro du run (= du push). Décalages réglables via les variables de dépôt `PR_OFFSET` et `PUSH_OFFSET` (Settings → Variables → Actions) ; sans réponse de l'API, `xxx` vaut 000. `versionCode` = numéro de run. En local : `0.0.01.000.000`.
-5. Exporte l'**AAB release** (`arm64-v8a`, build Gradle, `targetSdk` 36 — exigé par Google Play pour toute nouvelle app depuis le 31/08/2026),
+5. Installe le **build template Android Gradle** (`--install-android-build-template`, depuis `android_source.zip` des templates d'export) puis exporte l'**AAB release** (`arm64-v8a`, `targetSdk` 36 — exigé par Google Play pour toute nouvelle app depuis le 31/08/2026),
 6. Publie l'AAB en artefact `aszimut-release-aab` et un résumé dans l'onglet du run.
 
 ### Clé de signature : avec ou sans secrets
