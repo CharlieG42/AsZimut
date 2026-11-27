@@ -6,6 +6,9 @@
 # Builds
 build/
 
+# Projet Gradle généré par l'export Android (use_gradle_build)
+android/
+
 # Signature Android (ne jamais committer)
 *.jks
 *.keystore

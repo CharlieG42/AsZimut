@@ -1,6 +1,6 @@
 # AsZimut
 
-![Build APK](https://github.com/CharlieG42/AsZimut/actions/workflows/build-apk.yml/badge.svg)
+![Build AAB](https://github.com/CharlieG42/AsZimut/actions/workflows/build-aab.yml/badge.svg)
 
 **AsZimut** — l'As d'Azimut — est une application Android **WildZimut** (**Godot 4.4**, GDScript) pour jouer au
 **Blackjack** et au **Poker Texas Hold'em heads-up** contre une IA.
@@ -135,7 +135,7 @@ vibrations, sons, mode débutant, tutoriel, et réinitialisation en deux étapes
 
 ```
 project.godot            # Réglages (portrait 540x960, renderer Compatibilité, autoloads Bankroll et Stats)
-export_presets.cfg       # Préréglage d'export Android (arm64, APK)
+export_presets.cfg       # Préréglage d'export Android (arm64-v8a, AAB pour Google Play)
 icon.svg
 scenes/                  # home / blackjack / poker / dutch / about / stats (Options) / setup / multi_* / results / tutorial (un nœud Control + son script)
 scripts/
@@ -194,21 +194,23 @@ godot --headless --path . --script res://tests/smoke_test.gd
 
 ## CI/CD
 
-Le workflow [Build APK](.github/workflows/build-apk.yml) (image `barichello/godot-ci`) :
-1. Prépare les templates d'export et les réglages Android,
+Le workflow [Build AAB](.github/workflows/build-aab.yml) (image `barichello/godot-ci`), déclenché sur `main` et sur les PR :
+1. Prépare les templates d'export, les réglages Android et un **miroir Maven Central** pour Gradle
+   (init script `~/.gradle/init.d`, pour éviter les 429 de `repo.maven.apache.org` depuis les IP de CI),
 2. Importe le projet, lance les **tests logiques** et le **test de fumée** (bloquants),
 3. Choisit la clé de signature (voir ci-dessous),
 4. Numérote la version `0.0.01.xxx.yyy` (affichée dans **À propos**) : `xxx` = numéro de la dernière PR fusionnée (API GitHub), `yyy` = numéro du run (= du push). Décalages réglables via les variables de dépôt `PR_OFFSET` et `PUSH_OFFSET` (Settings → Variables → Actions) ; sans réponse de l'API, `xxx` vaut 000. `versionCode` = numéro de run. En local : `0.0.01.000.000`.
-5. Exporte l'APK **release** (`arm64-v8a`),
-6. Publie l'APK en artefact `aszimut-release-apk` et un résumé dans l'onglet du run.
+5. Installe le **build template Android Gradle** (`--install-android-build-template`, depuis `android_source.zip` des templates d'export) puis exporte l'**AAB release** (`arm64-v8a`, `targetSdk` 36 — exigé par Google Play pour toute nouvelle app depuis le 31/08/2026),
+6. Publie l'AAB en artefact `aszimut-release-aab` et un résumé dans l'onglet du run.
 
 ### Clé de signature : avec ou sans secrets
 Le workflow **réussit dans les deux cas** :
 - **Secrets absents, incomplets ou invalides** (mauvais mot de passe, alias inconnu…) : une
-  clé temporaire est générée et un avertissement s'affiche. Chaque APK a alors une signature
-  différente : il faut **désinstaller** l'ancienne version avant d'installer la nouvelle.
+  clé temporaire est générée et un avertissement s'affiche. Chaque build a alors une signature
+  différente : artefact de **test local uniquement, à ne pas uploader sur Google Play**.
 - **Secrets valides** : la clé est vérifiée avec `keytool` puis utilisée, la signature reste
-  identique d'une version à l'autre et l'APK se met à jour par-dessus l'ancien.
+  identique d'une version à l'autre : c'est la **clé d'upload Play App Signing**, Google re-signe
+  ensuite l'AAB avec sa propre clé.
 
 Pour garder la même signature, ajouter ces secrets au dépôt
 (*Settings → Secrets and variables → Actions*) :
@@ -228,6 +230,21 @@ des secrets ne sont jamais affichées.
 
 Encoder le keystore : `base64 -w0 aszimut.keystore` (Linux), `base64 -i aszimut.keystore` (macOS) ou
 `certutil -encode aszimut.keystore out.txt` (Windows, coller tout le contenu de `out.txt`).
+
+## Publication Google Play
+
+Checklist complète, textes de fiche FR/EN et politique de confidentialité dans
+[`docs/play-store/`](docs/play-store/publication-checklist.md) :
+
+- compte développeur sous l'organisation **WildZimut** (25 $), app `com.wildzimut.aszimut` ;
+- **Play App Signing** obligatoire : la clé des secrets GitHub sert de clé d'upload, l'artefact
+  `aszimut-release-aab` se upload tel quel (test interne d'abord, rapport pre-launch, puis production) ;
+- déclarations : public **18+**, **jeu d'argent simulé** au questionnaire IARC (jetons virtuels,
+  aucun argent réel — l'avertissement est aussi affiché dans l'app, écran « À propos »),
+  aucune publicité, aucun achat in-app, **aucune donnée collectée** (hors ligne, stockage local),
+  politique de confidentialité à publier et lier ;
+- visuels : icône 512×512 PNG alpha, feature graphic 1024×500, 2–8 captures téléphone
+  (captures tablette recommandées), catégorie Jeux → Casino.
 
 ## Roadmap
 

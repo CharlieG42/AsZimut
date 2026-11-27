@@ -1,7 +1,9 @@
-name: Build APK
+name: Build AAB (Play Store)
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -10,7 +12,7 @@ env:
 
 # Un nouveau push annule le build précédent encore en cours.
 concurrency:
-  group: build-apk-${{ github.ref }}
+  group: build-aab-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -58,7 +60,38 @@ jobs:
           ANDROID_DIR="${ANDROID_HOME:-/usr/lib/android-sdk}"
           SDKM="$(command -v sdkmanager || echo "$ANDROID_DIR/cmdline-tools/latest/bin/sdkmanager")"
           yes | "$SDKM" --sdk_root="$ANDROID_DIR" --licenses > /dev/null || true
-          "$SDKM" --sdk_root="$ANDROID_DIR" "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+          "$SDKM" --sdk_root="$ANDROID_DIR" "platform-tools" "build-tools;35.0.1" "build-tools;36.0.0" "platforms;android-35" "platforms;android-36"
+
+      - name: Miroir Maven Central pour Gradle (évite les 429 de repo.maven.apache.org en CI)
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/maven-mirror.gradle" <<'GRADLE_INIT'
+          def MIRROR = "https://maven-central.storage-download.googleapis.com/maven2/"
+          allprojects {
+              buildscript {
+                  repositories {
+                      maven { url MIRROR }
+                      maven { url "https://maven.google.com" }
+                  }
+              }
+              repositories {
+                  maven { url MIRROR }
+                  maven { url "https://maven.google.com" }
+              }
+          }
+          settingsEvaluated { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      maven { url MIRROR }
+                      maven { url "https://maven.google.com" }
+                      gradlePluginPortal()
+                      google()
+                      mavenCentral()
+                  }
+              }
+          }
+          GRADLE_INIT
+          cat "$HOME/.gradle/init.d/maven-mirror.gradle"
 
       - name: Import des ressources
         run: godot --headless --path . --import || true
@@ -117,10 +150,11 @@ jobs:
           grep -E '^version/(code|name)=' export_presets.cfg
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Export de l'APK (release)
+      - name: Export de l'AAB (release, build Gradle, targetSdk 36)
         run: |
+          export GRADLE_USER_HOME="$HOME/.gradle"
           mkdir -p build
-          godot --headless --path . --export-release "Android" build/aszimut.apk
+          godot --headless --path . --install-android-build-template --export-release "Android" build/aszimut.aab
           ls -l build/
 
       - name: Résumé
@@ -128,18 +162,18 @@ jobs:
           {
             echo "### AsZimut ${APP_VERSION} (build ${GITHUB_RUN_NUMBER})"
             if [ "${SIGN_MODE}" = "secrets" ]; then
-              echo "- Signature : **clé des secrets du dépôt** (mises à jour installables par-dessus)."
+              echo "- Signature : **clé des secrets du dépôt** (clé d'upload pour Play App Signing ; Google re-signe ensuite)."
             else
-              echo "- Signature : **clé temporaire** — désinstaller l'ancienne version avant d'installer celle-ci."
+              echo "- Signature : **clé temporaire** — artefact de test uniquement, **ne pas uploader sur Google Play**."
               if [ -n "${SIGN_ISSUE:-}" ]; then
                 echo "- Secret en cause : **\`${SIGN_ISSUE}\`** — ${SIGN_REASON}"
               fi
             fi
-            echo "- Artefact : \`aszimut-release-apk\`"
+            echo "- Artefact : \`aszimut-release-aab\` (\`build/aszimut.aab\`, à uploader tel quel dans la Play Console)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publication de l'APK
+      - name: Publication de l'AAB
         uses: actions/upload-artifact@v6
         with:
-          name: aszimut-release-apk
-          path: build/aszimut.apk
+          name: aszimut-release-aab
+          path: build/aszimut.aab

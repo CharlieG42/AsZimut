@@ -48,10 +48,21 @@ func _ready() -> void:
 	col.add_child(panel)
 
 	var games: Label = UIKit.label(
-		"Blackjack · Poker Hold'em · Dutch\nMultijoueur local sur un seul appareil, avec ZIA.", 13, UIKit.TEXT_SOFT
+		"Blackjack · Poker Hold'em · Three Card Poker\nRoulette · Baccarat · Dutch\nMultijoueur local sur un seul appareil, avec ZIA.",
+		13,
+		UIKit.TEXT_SOFT
 	)
 	games.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(games)
+	var legal: Label = UIKit.label(
+		"Jetons virtuels uniquement : aucune mise ni aucun gain d'argent réel (18+).\n"
+		+ "Hors ligne : aucune donnée personnelle n'est collectée ni envoyée.\n"
+		+ "© WildZimut",
+		12,
+		UIKit.TEXT_SOFT
+	)
+	legal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(legal)
 	UIKit.fade_in(self)
 
 
