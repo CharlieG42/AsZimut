@@ -8,7 +8,7 @@ crochets avant publication.
 
 # Privacy Policy — AsZimut
 
-**Éditeur / Publisher** : WildZimut
+**Éditeur / Publisher** : WildZimut, c/o CGENTIL - LOIRE FR42
 **Contact** : gentilcharlie@gmail.com
 **Application** : AsZimut (package `com.wildzimut.aszimut`)
 **Dernière mise à jour** : 27/11/2026
